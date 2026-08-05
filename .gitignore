@@ -36,6 +36,15 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# opencode (local MCP config — kept out of repo, contains per-user state)
+.opencode/
+opencode.jsonc
+.mcp-auth.json
+
+# Figma design snapshots (regenerated on demand)
+figma-*.png
+figma-*.json
+
 # generated native folders
 /ios
 /android

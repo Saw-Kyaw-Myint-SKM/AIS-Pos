@@ -20,6 +20,24 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-sqlite",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Clothes POS to scan clothing QR codes."
+        }
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/Pyidaungsu-Regular.ttf",
+            "./assets/fonts/Pyidaungsu-Bold.ttf"
+          ]
+        }
+      ]
+    ]
   }
 }
