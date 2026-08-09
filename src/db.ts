@@ -20,6 +20,7 @@ export type ClothingItem = {
   stock: number;
   choiceType: 'color' | 'photo';
   colorValue: string;
+  note: string;
 };
 
 export type Sale = {
@@ -100,6 +101,9 @@ export async function initializeDatabase(db: SQLiteDatabase) {
   if (!colNames.has('color_value')) {
     await db.execAsync("ALTER TABLE clothes ADD COLUMN color_value TEXT NOT NULL DEFAULT ''");
   }
+  if (!colNames.has('note')) {
+    await db.execAsync("ALTER TABLE clothes ADD COLUMN note TEXT NOT NULL DEFAULT ''");
+  }
 
   const count = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM clothes');
   if (!count?.count) {
@@ -140,29 +144,29 @@ export async function saveCustomerProfile(
 
 export async function getClothingItems(db: SQLiteDatabase) {
   return db.getAllAsync<ClothingItem>(
-    'SELECT id, qr_code AS qrCode, name, size, price, category, stock, choice_type AS choiceType, color_value AS colorValue FROM clothes ORDER BY name COLLATE NOCASE',
+    'SELECT id, qr_code AS qrCode, name, size, price, category, stock, choice_type AS choiceType, color_value AS colorValue, note FROM clothes ORDER BY name COLLATE NOCASE',
   );
 }
 
 export async function findClothingByQr(db: SQLiteDatabase, qrCode: string) {
   return db.getFirstAsync<ClothingItem>(
-    'SELECT id, qr_code AS qrCode, name, size, price, category, stock, choice_type AS choiceType, color_value AS colorValue FROM clothes WHERE qr_code = ?', qrCode,
+    'SELECT id, qr_code AS qrCode, name, size, price, category, stock, choice_type AS choiceType, color_value AS colorValue, note FROM clothes WHERE qr_code = ?', qrCode,
   );
 }
 
 export async function saveClothingItem(
   db: SQLiteDatabase,
-  item: Pick<ClothingItem, 'id' | 'qrCode' | 'name' | 'size' | 'price' | 'category' | 'stock' | 'choiceType' | 'colorValue'>,
+  item: Pick<ClothingItem, 'id' | 'qrCode' | 'name' | 'size' | 'price' | 'category' | 'stock' | 'choiceType' | 'colorValue' | 'note'>,
 ) {
   if (item.id) {
     await db.runAsync(
-      'UPDATE clothes SET qr_code = ?, name = ?, size = ?, price = ?, category = ?, stock = ?, choice_type = ?, color_value = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      item.qrCode, item.name, item.size, item.price, item.category, item.stock, item.choiceType, item.colorValue, item.id,
+      'UPDATE clothes SET qr_code = ?, name = ?, size = ?, price = ?, category = ?, stock = ?, choice_type = ?, color_value = ?, note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      item.qrCode, item.name, item.size, item.price, item.category, item.stock, item.choiceType, item.colorValue, item.note, item.id,
     );
   } else {
     await db.runAsync(
-      'INSERT INTO clothes (qr_code, name, size, price, category, stock, choice_type, color_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      item.qrCode, item.name, item.size, item.price, item.category, item.stock, item.choiceType, item.colorValue,
+      'INSERT INTO clothes (qr_code, name, size, price, category, stock, choice_type, color_value, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      item.qrCode, item.name, item.size, item.price, item.category, item.stock, item.choiceType, item.colorValue, item.note,
     );
   }
 }

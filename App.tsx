@@ -180,6 +180,7 @@ function PosApp() {
         stock,
         choiceType: form.choiceType,
         colorValue: form.colorValue,
+        note: form.note,
       });
       setRoute({ name: 'clothes' });
       await refreshAll();

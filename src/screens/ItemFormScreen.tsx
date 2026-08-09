@@ -16,6 +16,7 @@ export type ItemFormValue = {
   stock: string;
   choiceType: 'color' | 'photo';
   colorValue: string;
+  note: string;
 };
 
 export function itemToForm(item: ClothingItem): ItemFormValue {
@@ -29,6 +30,7 @@ export function itemToForm(item: ClothingItem): ItemFormValue {
     stock: String(item.stock),
     choiceType: item.choiceType,
     colorValue: item.colorValue,
+    note: item.note ?? '',
   };
 }
 
@@ -42,6 +44,7 @@ export const emptyForm: ItemFormValue = {
   stock: '',
   choiceType: 'color',
   colorValue: '',
+  note: '',
 };
 
 type Props = {
@@ -191,9 +194,18 @@ export default function ItemFormScreen({ initial, onBack, onSave }: Props) {
           />
         </View>
 
-        <Pressable style={styles.addRowBtn}>
-          <AppText style={styles.addRowText}>+ {t.items.addRow}</AppText>
-        </Pressable>
+        <View style={styles.field}>
+          <AppText style={styles.label}>{t.items.note}</AppText>
+          <TextInput
+            value={form.note}
+            onChangeText={(v) => set('note', v)}
+            placeholder={t.items.note}
+            placeholderTextColor="#9CA3AF"
+            multiline
+            textAlignVertical="top"
+            style={styles.textArea}
+          />
+        </View>
 
         <View style={styles.field}>
           <AppText style={styles.label}>{t.items.choiceType}</AppText>
@@ -350,19 +362,17 @@ const styles = StyleSheet.create({
     fontFamily: 'Pyidaungsu-Bold',
     color: BLUE,
   },
-  addRowBtn: {
-    borderWidth: 1,
-    borderColor: BLUE,
+  textArea: {
+    backgroundColor: INPUT_BG,
     borderRadius: 10,
-    borderStyle: 'dashed',
-    paddingVertical: 13,
-    alignItems: 'center',
-    marginBottom: 18,
-  },
-  addRowText: {
-    fontSize: 14,
-    color: BLUE,
-    fontFamily: font.bold,
+    borderWidth: 1,
+    borderColor: INPUT_BORDER,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontFamily: 'Pyidaungsu-Regular',
+    fontSize: 15,
+    color: '#111827',
+    minHeight: 96,
   },
   radioGroup: {
     flexDirection: 'row',

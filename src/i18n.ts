@@ -56,6 +56,7 @@ export const t = {
     stock: 'စတော့',
     barcode: 'ဘားကုဒ်',
     addRow: 'အတန်းထည့်မည်',
+    note: 'မှတ်စု',
     choiceType: 'ရွေးချယ်မှုအမျိုးအစား',
     color: 'အရောင်',
     photo: 'ဓာတ်ပုံ',
