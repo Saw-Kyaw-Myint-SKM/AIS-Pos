@@ -22,7 +22,12 @@ export const t = {
   },
   sell: {
     title: 'အရောင်း',
+    brand: 'Source MM',
+    ticket: 'ဘေလ်',
+    save: 'သိမ်းမည်',
+    customPrice: 'စျေးနှုန်း စိတ်ကြိုက်',
     search: 'ပစ္စည်းအမည်ဖြင့် ရှာရန်…',
+    categoryAll: 'အမျိုးအစားအားလုံး',
     emptyTitle: 'ပစ္စည်းမတွေ့ပါ',
     emptyHint: 'ပစ္စည်းစာရင်းတွင် အရင်ထည့်သွင်းပါ',
     cart: 'စျေးခြင်း',
