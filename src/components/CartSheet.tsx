@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
   totalLabel: { color: colors.muted, fontSize: 15 },
   totalValue: { color: colors.header, fontSize: 24 },
   confirmBtn: {
-    backgroundColor: colors.success,
+    backgroundColor: colors.header,
     borderRadius: radius.md,
     paddingVertical: 16,
     alignItems: 'center',

@@ -22,7 +22,7 @@ export const t = {
   },
   sell: {
     title: 'အရောင်း',
-    brand: 'Source MM',
+    brand: 'အရောင်း',
     ticket: 'ဘေလ်',
     save: 'သိမ်းမည်',
     customPrice: 'စျေးနှုန်း စိတ်ကြိုက်',
@@ -34,6 +34,7 @@ export const t = {
     piece: 'ခု',
     scan: 'QR / ဘား',
     tapToAdd: 'ပစ္စည်းကဒ်ကို နှိပ်၍ စျေးခြင်းထဲ ထည့်ပါ',
+    stock: 'စတော့',
   },
   cart: {
     title: 'စျေးခြင်း',

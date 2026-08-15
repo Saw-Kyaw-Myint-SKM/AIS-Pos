@@ -131,10 +131,19 @@ function PosApp() {
     });
   }, []);
 
-  const addItem = useCallback((item: ClothingItem) => {
-    changeQuantity(item.id, 1);
-    showToast(t.toast.added);
-  }, [changeQuantity, showToast]);
+  const setItemQty = useCallback((item: ClothingItem, qty: number) => {
+    setCart((c) => {
+      const current = c[item.id] ?? 0;
+      if (qty === current) return c;
+      if (qty <= 0) {
+        if (!(item.id in c)) return c;
+        const next = { ...c };
+        delete next[item.id];
+        return next;
+      }
+      return { ...c, [item.id]: qty };
+    });
+  }, []);
 
   const onScanned = useCallback(async (value: string, format: string, keepOpen: boolean) => {
     if (!keepOpen) setScannerOpen(false);
@@ -247,9 +256,10 @@ function PosApp() {
         {route.name === 'sell' && (
           <SellScreen
             items={items}
+            cart={cart}
             cartCount={cartCount}
             cartTotal={cartTotal}
-            onAdd={addItem}
+            onChangeQty={setItemQty}
             onOpenCart={() => setCartOpen(true)}
             onScan={() => setScannerOpen(true)}
             onBack={() => setRoute({ name: 'home' })}
@@ -298,7 +308,11 @@ function PosApp() {
         <TabBar
           tabs={tabs}
           activeKey={route.name}
-          onTab={(key) => setRoute({ name: key as Route['name'] })}
+          onTab={(key) => {
+            if (key === 'home') setRoute({ name: 'home' });
+            else if (key === 'clothes') setRoute({ name: 'clothes' });
+            else if (key === 'history') setRoute({ name: 'history' });
+          }}
         />
       )}
 

@@ -98,14 +98,68 @@ export function HomeIcon({ size = 24, color = '#FFFFFF' }: IconProps) {
 }
 
 export function ScanIcon({ size = 24, color = '#FFFFFF' }: IconProps) {
+  // Figma-style scan: rounded corner brackets framing a center barcode.
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {/* Corner brackets */}
       <Path
-        d="M4 7V5a1 1 0 0 1 1-1h2M20 7V5a1 1 0 0 0-1-1h-2M4 17v2a1 1 0 0 0 1 1h2M20 17v2a1 1 0 0 1-1 1h-2M7 12h10"
+        d="M3.5 7.5V5a1.5 1.5 0 0 1 1.5-1.5h2.5"
         stroke={color}
-        strokeWidth={2}
+        strokeWidth={1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+      <Path
+        d="M20.5 7.5V5a1.5 1.5 0 0 0-1.5-1.5h-2.5"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3.5 16.5V19a1.5 1.5 0 0 0 1.5 1.5h2.5"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M20.5 16.5V19a1.5 1.5 0 0 1-1.5 1.5h-2.5"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Barcode bars (Figma-style) */}
+      <Path
+        d="M7 9v6"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M9.5 9v6"
+        stroke={color}
+        strokeWidth={1.2}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M11.5 9v6"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M14 9v6"
+        stroke={color}
+        strokeWidth={1.2}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M16 9v6"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
       />
     </Svg>
   );
@@ -157,6 +211,47 @@ export function BackArrowIcon({ size = 24, color = '#FFFFFF' }: IconProps) {
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
         d="M15 18l-6-6 6-6"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+export function MenuIcon({ size = 24, color = '#FFFFFF' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4 7h16M4 12h16M4 17h16"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+export function SearchIcon({ size = 24, color = '#1E1E1E' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={11} cy={11} r={7} stroke={color} strokeWidth={2} />
+      <Path
+        d="M20 20l-3.5-3.5"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+export function ChevronDownIcon({ size = 24, color = '#1D1B20' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M6 9l6 6 6-6"
         stroke={color}
         strokeWidth={2}
         strokeLinecap="round"

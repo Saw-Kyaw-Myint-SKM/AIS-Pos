@@ -36,10 +36,21 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
-# opencode (local MCP config — kept out of repo, contains per-user state)
-.opencode/
+# opencode — ignore local state; keep shared agent presets
+.opencode/*
+!.opencode/agent/
+!.opencode/agent/**
 opencode.jsonc
 .mcp-auth.json
+
+# open-orc local runtime
+.worktrees/
+.open-orc/runs/
+.open-orc/ui-runs.json
+.open-orc/draft-pending.json
+.open-orc/specs/**/spec_*.md
+!.open-orc/specs/_rules/
+!.open-orc/specs/_rules/**
 
 # Figma design snapshots (regenerated on demand)
 figma-*.png

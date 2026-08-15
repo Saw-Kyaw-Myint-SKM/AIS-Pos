@@ -47,8 +47,15 @@ export type TodaySummary = {
 };
 
 export async function initializeDatabase(db: SQLiteDatabase) {
+  // Set WAL mode in its own execAsync so the journal-mode switch doesn't
+  // leave an open statement when the enclosing transaction commits.
+  // Without this, expo-sqlite 16 on Android rejects subsequent closeAsync
+  // with "unable to close due to unfinalized statements".
+  await db.execAsync('PRAGMA journal_mode = WAL;');
+
+  // Schema in a single statement (one transaction). Keeps the connection
+  // clean for closeAsync.
   await db.execAsync(`
-    PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS customer_profile (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       name TEXT NOT NULL,
@@ -115,6 +122,14 @@ export async function initializeDatabase(db: SQLiteDatabase) {
       'TSHIRT-BLACK-L', 'တီရှပ်အနက်', 'L', 9000,
       '2000000000017', 'လက်ကိုင်အိတ်အနက်', 'Free', 4500,
     );
+  }
+
+  // Flush any pending WAL state so closeAsync does not see unfinalized
+  // statements. Safe to run repeatedly; returns immediately if no WAL.
+  try {
+    await db.execAsync('PRAGMA wal_checkpoint(TRUNCATE);');
+  } catch {
+    // Ignore — best effort. Some expo-sqlite versions may not support it.
   }
 }
 

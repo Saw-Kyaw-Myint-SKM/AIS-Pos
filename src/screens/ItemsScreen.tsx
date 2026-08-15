@@ -17,13 +17,13 @@ type Props = {
   onCreateCategory: () => void;
 };
 
-const BLUE = '#4A6CF7';
+const BLUE = '#3B3F76';
 const ACTIVE_COLOR = '#4F46E5';
 
 const CARD_BORDER = '#E5E7EA';
 const CARD_NAME = '#101126';
 const CARD_MUTED = '#6B727A';
-const PRICE_GREEN = '#589C2B';
+const PRICE_COLOR = '#3B3F76';
 
 const COLOR_PICKER = [
   { label: 'အနက်', hex: '#1A1A1A' },
@@ -206,7 +206,7 @@ export default function ItemsScreen({ items, onPressItem, onDelete, onCreateProd
                   onPress={() => onDelete(item)}
                   style={styles.deleteBtn}
                 >
-                  <TrashIcon size={16} color={CARD_MUTED} />
+                  <TrashIcon size={20} color={CARD_MUTED} />
                 </Pressable>
               </Pressable>
             );
@@ -482,18 +482,18 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   thumb: {
-    width: 56,
-    height: 56,
-    borderRadius: 10,
+    width: 72,
+    height: 72,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  thumbText: { color: '#FFFFFF', fontSize: 22, fontFamily: font.bold },
+  thumbText: { color: '#FFFFFF', fontSize: 28, fontFamily: font.bold },
   thumbTextDark: { color: '#1A1A1A' },
   info: { flex: 1, marginLeft: 12, justifyContent: 'center' },
   name: { fontSize: 14, color: CARD_NAME, fontFamily: font.bold },
   sub: { fontSize: 12, color: CARD_MUTED, fontFamily: font.regular, marginTop: 4 },
-  price: { fontSize: 14, color: PRICE_GREEN, fontFamily: font.bold, marginRight: 8 },
+  price: { fontSize: 14, color: PRICE_COLOR, fontFamily: font.bold, marginRight: 8 },
   deleteBtn: { padding: 4 },
   comingSoon: {
     flex: 1,

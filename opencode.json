@@ -1,0 +1,102 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "figma": {
+      "type": "remote",
+      "url": "http://127.0.0.1:3845/mcp",
+      "enabled": true,
+      "timeout": 30000
+    }
+  },
+  "agent": {
+    "router": {
+      "model": "opencode-go/qwen3.6-plus",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "list": "allow"
+      }
+    },
+    "bugfix-planner": {
+      "model": "opencode-go/qwen3.6-plus",
+      "permission": {
+        "edit": { "*": "deny", ".open-orc/specs/**": "allow" },
+        "bash": {
+          "*": "deny",
+          "git status*": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "ls*": "allow",
+          "npm run typecheck*": "allow"
+        },
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "list": "allow",
+        "webfetch": "allow"
+      }
+    },
+    "figma-planner": {
+      "model": "opencode-go/qwen3.6-plus",
+      "permission": {
+        "edit": { "*": "deny", ".open-orc/specs/**": "allow" },
+        "bash": {
+          "*": "deny",
+          "git status*": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "ls*": "allow",
+          "npm run typecheck*": "allow"
+        },
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "list": "allow",
+        "webfetch": "allow"
+      }
+    },
+    "bugfix-dev": { "model": "opencode-go/minimax-m3" },
+    "figma-dev": { "model": "opencode-go/minimax-m3" },
+    "bugfix-verifier": {
+      "model": "opencode-go/deepseek-v4-pro",
+      "permission": {
+        "edit": "deny",
+        "bash": {
+          "*": "deny",
+          "npm *": "allow",
+          "npx *": "allow",
+          "git status*": "allow",
+          "git diff*": "allow",
+          "git log*": "allow"
+        },
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "list": "allow",
+        "webfetch": "allow"
+      }
+    },
+    "figma-verifier": {
+      "model": "opencode-go/deepseek-v4-pro",
+      "permission": {
+        "edit": "deny",
+        "bash": {
+          "*": "deny",
+          "npm *": "allow",
+          "npx *": "allow",
+          "git status*": "allow",
+          "git diff*": "allow",
+          "git log*": "allow"
+        },
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "list": "allow",
+        "webfetch": "allow"
+      }
+    }
+  }
+}

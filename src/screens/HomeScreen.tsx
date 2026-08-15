@@ -63,11 +63,11 @@ export default function HomeScreen({
   ];
 
   const services: ServiceTile[] = [
-    { key: 'sale', label: t.home.sale, iconBg: colors.iconGreen, Icon: DollarIcon, onPress: onStartSale },
+    { key: 'sale', label: t.home.sale, iconBg: colors.iconIndigo, Icon: DollarIcon, onPress: onStartSale },
     { key: 'products', label: t.home.products, iconBg: colors.iconPurple, Icon: PackageIcon, onPress: onOpenItems },
     { key: 'history', label: t.home.salesHistory, iconBg: colors.iconBlue, Icon: ReceiptIcon, onPress: onOpenHistory },
     { key: 'scan', label: t.home.scan, iconBg: colors.iconCyan, Icon: ScanIcon, onPress: onScan },
-    { key: 'setting', label: t.home.setting, iconBg: colors.iconTeal, Icon: SettingsIcon, onPress: onOpenSettings },
+    { key: 'setting', label: t.home.setting, iconBg: colors.iconSlate, Icon: SettingsIcon, onPress: onOpenSettings },
   ];
 
   return (
@@ -126,7 +126,7 @@ export default function HomeScreen({
                 style={({ pressed }) => [styles.serviceCard, pressed && styles.pressed]}
               >
                 <View style={[styles.iconBox, { backgroundColor: item.iconBg }]}>
-                  <Icon size={22} color="#FFFFFF" />
+                  <Icon size={30} color="#FFFFFF" />
                 </View>
                 <AppText style={styles.serviceLabel} numberOfLines={2}>
                   {item.label}
@@ -162,8 +162,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatar: {
-    width: 52,
-    height: 52,
+    width: 56,
+    height: 56,
     borderRadius: 14,
     backgroundColor: '#FFFFFF',
     overflow: 'hidden',
@@ -171,8 +171,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarImage: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
   },
   textWrap: {
     marginLeft: 12,
@@ -224,7 +224,6 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     color: '#7A8880',
-    marginTop: 4,
     fontSize: 10,
     fontFamily: font.regular,
     marginTop: 8,
@@ -233,40 +232,6 @@ const styles = StyleSheet.create({
     width: 1,
     backgroundColor: '#EAEAEA',
     marginVertical: 4,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    marginTop: -24,
-    marginHorizontal: H_PAD,
-    gap: GAP,
-  },
-  statCard: {
-    flex: 1,
-    minHeight: 76,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#EAEAEA',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...tileShadow,
-  },
-  statLabel: {
-    color: '#6B7280',
-    fontSize: 11,
-    fontFamily: font.regular,
-    textAlign: 'center',
-    lineHeight: 16,
-    marginBottom: 4,
-  },
-  statValue: {
-    color: '#111827',
-    marginBottom: 6,
-    fontSize: 14,
-    fontFamily: font.bold,
-    textAlign: 'center',
   },
   sectionTitle: {
     color: '#111827',
@@ -285,23 +250,23 @@ const styles = StyleSheet.create({
   serviceCard: {
     width: COL,
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: '#EAEAEA',
-    paddingTop: 14,
-    paddingBottom: 12,
+    paddingTop: 16,
+    paddingBottom: 14,
     paddingHorizontal: 8,
     alignItems: 'center',
     ...tileShadow,
   },
   pressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
   iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 56,
+    height: 56,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   serviceLabel: {
     color: '#374151',

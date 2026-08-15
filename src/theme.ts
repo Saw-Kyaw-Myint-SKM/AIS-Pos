@@ -1,31 +1,33 @@
 export const colors = {
   bg: '#F6F3EC',
   surface: '#FFFFFF',
-  surfaceAlt: '#FBF9F3',
-  header: '#0E4F45',
-  headerSoft: '#17685B',
+  surfaceAlt: '#F4F4F7',
+  header: '#3B3F76',
+  headerSoft: '#4A4F8F',
   headerText: '#FFFFFF',
-  accent: '#22B8A0',
-  accentSoft: '#E3F4F0',
-  primary: '#E8862E',
-  primaryDark: '#C96F1B',
-  success: '#1E9E6A',
-  successSoft: '#E4F5EC',
+  accent: '#6366F1',
+  accentSoft: '#EEF0FF',
+  primary: '#3B3F76',
+  primaryDark: '#2E3263',
+  success: '#3B82F6',
+  successSoft: '#E0E7FF',
   danger: '#D9534F',
   dangerSoft: '#FBEAE9',
-  text: '#22302B',
+  text: '#1F2330',
   muted: '#7A8880',
-  border: '#E7E1D3',
+  border: '#E2E2EA',
   sheet: '#FFFFFF',
-  banner: '#757575',
+  banner: '#5A5F7A',
   bannerText: '#FFFFFF',
   tileBorder: '#E5E7EB',
-  iconGreen: '#589C2B',
   iconPurple: '#8B5CF6',
   iconBlue: '#3B82F6',
   iconCyan: '#0EA5E9',
-  iconTeal: '#10B982',
-  accentBlue: '#4A6CF7',
+  iconIndigo: '#6366F1',
+  iconSlate: '#475569',
+  iconRose: '#E11D48',
+  iconGreen: '#10B981',
+  accentBlue: '#3B3F76',
 };
 
 export const spacing = (n: number): number => n * 4;
@@ -37,7 +39,7 @@ export const font = {
   bold: 'Pyidaungsu-Bold',
 };
 
-export const avatarPalette = ['#E8862E', '#1E9E6A', '#3E7CB1', '#8E5BA6', '#C7536B', '#0E4F45'];
+export const avatarPalette = ['#6366F1', '#8B5CF6', '#3B82F6', '#0EA5E9', '#E11D48', '#475569'];
 
 export const shadow = {
   shadowColor: '#22302B',

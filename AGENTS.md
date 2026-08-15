@@ -219,3 +219,95 @@ npm run typecheck  # tsc --noEmit
 5. **Font must be Pyidaungsu** — use `AppText` (or `style={fontFamily: font.regular}`) for all text.
 6. **Price formatting** — always use `formatKyat()` for display.
 7. **DB schema changes** — add to `initializeDatabase` as migration, avoid breaking existing data.
+
+---
+
+## open-orc / open-orc-ui (multi-agent)
+
+This app is orchestrated by **open-orc** (control plane) with **OpenCode** as the agent harness. Use **open-orc-ui** for Spec editing and parallel worktree runs.
+
+### Ownership
+
+| Layer | Owns |
+| --- | --- |
+| **open-orc** | Workflow order, Specs, handoffs, run state, retry, CLI/HTTP (`:8320`) |
+| **OpenCode** | Agent loop, tools, model auth, Figma MCP |
+| **open-orc-ui** | Spec inbox, worktrees, SSE proxy, PR/GitHub (`:8330`) |
+
+### Workflows (`.open-orc/config.json`)
+
+| Workflow | Agents | Use for |
+| --- | --- | --- |
+| `design-implement` | figma-planner → figma-dev → figma-verifier | Figma URL → UI |
+| `bugfix-implement` | bugfix-* | Bugs / non-Figma fixes |
+
+Default workflow: `design-implement`. Router picks between these two only.
+
+Handoffs pass compact shared knowledge between specialists. Verifier `Verdict: FAIL` retries the nearest `*dev*` agent (open-orc retry harness).
+
+### Models (OpenCode Go)
+
+Per-role models are set in `.opencode/agent/*.md` frontmatter and mirrored in `opencode.json`:
+
+| Role | Agents | Model |
+| --- | --- | --- |
+| Planner / router | `*planner`, `router` | `opencode-go/qwen3.6-plus` |
+| Dev | `*dev` | `opencode-go/minimax-m3` |
+| Verifier | `*verifier` | `opencode-go/deepseek-v4-pro` |
+
+Ensure `opencode auth login` (or OpenCode Go provider) has access to these models.
+
+### Permissions
+
+| Role | Edit | Notes |
+| --- | --- | --- |
+| **Planner / router** | Deny app code | Planner may write only `.open-orc/specs/**` (Spec files). Router is fully read-only. |
+| **Dev** | Allow | Implements code + assets |
+| **Verifier** | Deny all edits | Read + `npm`/`npx` verify commands only |
+
+### Run (two terminals)
+
+```bash
+# Terminal 1 — from clothes-pos
+open-orc serve
+
+# Terminal 2
+open-orc-ui serve --project .
+# http://127.0.0.1:8330
+```
+
+### Before running (checklist)
+
+1. **Figma Desktop** open with Dev Mode MCP enabled (`http://127.0.0.1:3845/mcp`) — required for design workflow.
+2. **OpenCode auth** — `opencode auth login` (or OpenCode Go provider) with access to planner/dev/verifier models.
+3. **Both servers running** — `open-orc serve` (port 8320) and `open-orc-ui serve --project .` (port 8330) from **clothes-pos**.
+4. **Figma URL** must include `node-id` when implementing from design.
+5. After UI code changes in open-orc-ui, rebuild web: `npm run build:web` in the open-orc-ui package (or use a linked dev build).
+
+| Symptom | Likely cause |
+| --- | --- |
+| Cannot reach open-orc | `open-orc serve` not running in clothes-pos |
+| Planner empty Design facts | Figma Desktop MCP off or wrong URL |
+| Model / auth error | OpenCode Go not logged in |
+| Stale UI buttons or layout | open-orc-ui web not rebuilt |
+
+Or CLI:
+
+```bash
+open-orc run --workflow design-implement --from .open-orc/inbox/your-spec.md
+```
+
+### Figma → code
+
+1. In open-orc-ui **Docs**, pick **design** (or **bugfix**).
+2. Fill the short form (Goal + Figma URL for design). Templates load from `.open-orc/formats/{design,bugfix}.md`.
+3. **Create Spec with agent** (planner-only, live log on Docs) or **Save draft** (format template + form, no agent).
+4. Review Spec under **Show Spec markdown** if needed → **Run in parallel**.
+5. Agent-drafted Specs skip the planner on parallel run (dev → verifier only). Save-draft Specs run the full chain.
+6. Watch **Parallel** for live logs; successful runs can open a PR.
+
+**Figma MCP (required for OpenCode):** enable Figma Desktop Dev Mode MCP, then use project `opencode.json` pointing at `http://127.0.0.1:3845/mcp`. Alternative: community MCP + `FIGMA_API_KEY` (PAT). Official remote Figma OAuth often rejects OpenCode.
+
+Agents: `.opencode/agent/figma-*.md`  
+Rules: `.open-orc/specs/_rules/design-implement.md`  
+Format templates: `.open-orc/formats/design.md`, `.open-orc/formats/bugfix.md`

@@ -1,30 +1,32 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
   FlatList,
   Pressable,
   StyleSheet,
-  Switch,
   TextInput,
   View,
 } from 'react-native';
 import type { ClothingItem } from '../db';
 import { formatKyat, t, toMM } from '../i18n';
-import { colors, radius, shadow } from '../theme';
+import { colors, font, radius, shadow } from '../theme';
 import AppText from '../components/AppText';
 import EmptyState from '../components/EmptyState';
 import ItemCard from '../components/ItemCard';
 import {
+  BackArrowIcon,
   ChevronDownIcon,
-  MenuIcon,
   ScanIcon,
   SearchIcon,
 } from '../components/ServiceIcon';
 
 type Props = {
   items: ClothingItem[];
+  cart: Record<number, number>;
   cartCount: number;
   cartTotal: number;
-  onAdd: (item: ClothingItem) => void;
+  onChangeQty: (item: ClothingItem, qty: number) => void;
   onOpenCart: () => void;
   onScan: () => void;
   onBack: () => void;
@@ -32,15 +34,26 @@ type Props = {
 
 export default function SellScreen({
   items,
+  cart,
   cartCount,
   cartTotal,
-  onAdd,
+  onChangeQty,
   onOpenCart,
   onScan,
   onBack,
 }: Props) {
   const [query, setQuery] = useState('');
   const [customPrice, setCustomPrice] = useState(false);
+  const toggleAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(toggleAnim, {
+      toValue: customPrice ? 1 : 0,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [customPrice, toggleAnim]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -62,37 +75,74 @@ export default function SellScreen({
           onPress={onBack}
           style={styles.iconBtn}
         >
-          <MenuIcon size={26} color="#FFFFFF" />
+          <BackArrowIcon size={26} color="#FFFFFF" />
         </Pressable>
         <AppText style={styles.title}>{t.sell.brand}</AppText>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="scan"
-          onPress={onScan}
-          style={styles.iconBtn}
-        >
-          <ScanIcon size={24} color="#FFFFFF" />
-        </Pressable>
-      </View>
-
-      <View style={styles.actionBar}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={onOpenCart}
-          style={({ pressed }) => [styles.ticketPill, pressed && styles.pressed]}
-        >
-          <AppText bold style={styles.ticketText}>{t.sell.ticket}</AppText>
-          <View style={styles.ticketBadge}>
-            <AppText bold style={styles.ticketBadgeText}>{toMM(cartCount)}</AppText>
-          </View>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={onOpenCart}
-          style={({ pressed }) => [styles.saveBtn, pressed && styles.saveBtnPressed]}
-        >
-          <AppText bold style={styles.saveText}>{t.sell.save}</AppText>
-        </Pressable>
+        <View style={styles.headerRight}>
+          <Pressable
+            accessibilityRole="switch"
+            accessibilityState={{ checked: customPrice }}
+            onPress={() => setCustomPrice((v) => !v)}
+            style={({ pressed }) => [
+              styles.headerToggle,
+              pressed && styles.togglePressed,
+            ]}
+          >
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFillObject,
+                {
+                  borderRadius: 14,
+                  backgroundColor: toggleAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['rgba(255,255,255,0.25)', '#FFFFFF'],
+                  }),
+                },
+              ]}
+            />
+            <Animated.View
+              style={[
+                styles.headerToggleThumb,
+                {
+                  transform: [
+                    {
+                      translateX: toggleAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, 16],
+                      }),
+                    },
+                  ],
+                  backgroundColor: toggleAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['#FFFFFF', '#4A6CF7'],
+                  }),
+                },
+              ]}
+            />
+            <Animated.Text
+              style={[
+                styles.headerToggleLabel,
+                {
+                  color: toggleAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['#FFFFFF', '#4A6CF7'],
+                  }),
+                },
+              ]}
+            >
+              {t.sell.customPrice}
+            </Animated.Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="scan"
+            onPress={onScan}
+            style={styles.iconBtn}
+          >
+            <ScanIcon size={24} color="#FFFFFF" />
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.searchWrap}>
@@ -113,17 +163,6 @@ export default function SellScreen({
         </View>
       </View>
 
-      <View style={styles.toggleRow}>
-        <Switch
-          value={customPrice}
-          onValueChange={setCustomPrice}
-          trackColor={{ false: '#D1D5DB', true: colors.accentBlue }}
-          thumbColor="#FFFFFF"
-          ios_backgroundColor="#D1D5DB"
-        />
-        <AppText style={styles.toggleLabel}>{t.sell.customPrice}</AppText>
-      </View>
-
       <FlatList
         data={filtered}
         keyExtractor={(item) => String(item.id)}
@@ -133,7 +172,13 @@ export default function SellScreen({
           styles.list,
           cartCount > 0 && styles.listWithCart,
         ]}
-        renderItem={({ item }) => <ItemCard item={item} onAdd={onAdd} />}
+        renderItem={({ item }) => (
+          <ItemCard
+            item={item}
+            quantity={cart[item.id] ?? 0}
+            onChangeQty={onChangeQty}
+          />
+        )}
         ListEmptyComponent={
           <EmptyState title={t.sell.emptyTitle} hint={t.sell.emptyHint} />
         }
@@ -169,10 +214,10 @@ export default function SellScreen({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: '#F5F5F5' },
   header: {
     height: 58,
-    backgroundColor: colors.accentBlue,
+    backgroundColor: '#4A6CF7',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -190,47 +235,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontFamily: 'Pyidaungsu-Bold',
   },
-  actionBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 12,
-    backgroundColor: colors.bg,
-  },
-  ticketPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingLeft: 14,
-    paddingRight: 6,
-    paddingVertical: 6,
-    gap: 8,
-  },
-  pressed: { opacity: 0.9 },
-  ticketText: { color: colors.text, fontSize: 14 },
-  ticketBadge: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: colors.accentBlue,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-  },
-  ticketBadgeText: { color: '#FFFFFF', fontSize: 12, lineHeight: 14 },
-  saveBtn: {
-    backgroundColor: colors.accentBlue,
-    borderRadius: 12,
-    paddingHorizontal: 22,
-    paddingVertical: 10,
-  },
-  saveBtnPressed: { opacity: 0.92 },
-  saveText: { color: '#FFFFFF', fontSize: 14 },
   searchWrap: {
     paddingHorizontal: 16,
     paddingTop: 4,
@@ -259,18 +263,36 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.border,
     marginLeft: 4,
   },
-  toggleRow: {
+  headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 10,
-    paddingHorizontal: 24,
-    paddingTop: 8,
-    paddingBottom: 12,
+    gap: 8,
   },
-  toggleLabel: {
-    color: colors.banner,
-    fontSize: 14,
+  headerToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 14,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    gap: 4,
+    minHeight: 26,
+    overflow: 'hidden',
+  },
+  togglePressed: { opacity: 0.85 },
+  headerToggleThumb: {
+    position: 'absolute',
+    left: 4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#FFFFFF',
+  },
+  headerToggleLabel: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontFamily: font.bold,
+    marginLeft: 18,
   },
   row: { gap: 16, paddingHorizontal: 16 },
   list: { paddingTop: 6, paddingBottom: 24 },
