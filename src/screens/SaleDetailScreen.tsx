@@ -1,8 +1,8 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { t } from '../i18n';
-import { colors } from '../theme';
 import AppText from '../components/AppText';
+import { BackArrowIcon } from '../components/ServiceIcon';
 import Receipt from '../components/Receipt';
 
 type Props = {
@@ -14,8 +14,13 @@ export default function SaleDetailScreen({ saleId, onBack }: Props) {
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
-        <Pressable accessibilityRole="button" onPress={onBack} style={styles.backBtn}>
-          <AppText bold style={styles.backText}>‹</AppText>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="back"
+          onPress={onBack}
+          style={styles.backBtn}
+        >
+          <BackArrowIcon size={26} color="#FFFFFF" />
         </Pressable>
         <AppText bold style={styles.title}>{t.receipt.title}</AppText>
         <View style={styles.backBtn} />
@@ -28,13 +33,12 @@ export default function SaleDetailScreen({ saleId, onBack }: Props) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: '#F5F5F5' },
   header: {
-    backgroundColor: colors.header,
+    backgroundColor: '#4A6CF7',
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 12, paddingVertical: 14, gap: 10,
   },
-  backBtn: { width: 40, height: 40 },
-  backText: { color: '#fff', fontSize: 26, lineHeight: 30, textAlign: 'center' },
+  backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   title: { flex: 1, color: '#fff', fontSize: 20, textAlign: 'center' },
 });

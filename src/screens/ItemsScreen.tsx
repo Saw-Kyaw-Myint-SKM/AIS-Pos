@@ -1,23 +1,30 @@
+import { Image } from 'expo-image';
 import React, { useMemo, useState } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
-import type { ClothingItem } from '../db';
-import { formatKyat, t } from '../i18n';
+import type { Category, ClothingItem } from '../db';
+import { formatKyat, t, toMM } from '../i18n';
 import { avatarPalette, font } from '../theme';
 import AppText from '../components/AppText';
 import EmptyState from '../components/EmptyState';
+import CategoriesScreen from './CategoriesScreen';
 import { ListIcon, CategoriesIcon, TrashIcon } from '../components/ServiceIcon';
 
 type TabKey = 'products' | 'categories';
 
 type Props = {
   items: ClothingItem[];
+  categories: Category[];
   onPressItem: (item: ClothingItem) => void;
   onDelete: (item: ClothingItem) => void;
   onCreateProduct: () => void;
   onCreateCategory: () => void;
+  onEditCategory: (category: Category) => void;
+  onDeleteCategory: (category: Category) => void;
+  onMoveCategoryUp: (category: Category) => void;
+  onMoveCategoryDown: (category: Category) => void;
 };
 
-const BLUE = '#3B3F76';
+const BLUE = '#4A6CF7';
 const ACTIVE_COLOR = '#4F46E5';
 
 const CARD_BORDER = '#E5E7EA';
@@ -42,27 +49,33 @@ const COLOR_PICKER = [
 
 type FilterModal = 'color' | 'category' | null;
 
-export default function ItemsScreen({ items, onPressItem, onDelete, onCreateProduct, onCreateCategory }: Props) {
+export default function ItemsScreen({
+  items,
+  categories,
+  onPressItem,
+  onDelete,
+  onCreateProduct,
+  onCreateCategory,
+  onEditCategory,
+  onDeleteCategory,
+  onMoveCategoryUp,
+  onMoveCategoryDown,
+}: Props) {
   const [tab, setTab] = useState<TabKey>('products');
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [search, setSearch] = useState('');
   const [filterColor, setFilterColor] = useState('');
-  const [filterCategory, setFilterCategory] = useState('');
+  const [filterCategory, setFilterCategory] = useState<number | null>(null);
   const [filterModal, setFilterModal] = useState<FilterModal>(null);
 
-  const categories = useMemo(() => {
-    const set = new Set(items.map((i) => i.category).filter(Boolean));
-    return Array.from(set);
-  }, [items]);
-
-  const hasFilter = search.trim() !== '' || filterColor !== '' || filterCategory !== '';
+  const hasFilter = search.trim() !== '' || filterColor !== '' || filterCategory !== null;
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase();
     return items.filter((item) => {
       if (q && !item.name.toLowerCase().includes(q)) return false;
       if (filterColor && item.colorValue !== filterColor) return false;
-      if (filterCategory && item.category !== filterCategory) return false;
+      if (filterCategory !== null && item.categoryId !== filterCategory) return false;
       return true;
     });
   }, [items, search, filterColor, filterCategory]);
@@ -70,7 +83,7 @@ export default function ItemsScreen({ items, onPressItem, onDelete, onCreateProd
   const clearFilters = () => {
     setSearch('');
     setFilterColor('');
-    setFilterCategory('');
+    setFilterCategory(null);
   };
 
   const closeMenu = () => setShowAddMenu(false);
@@ -164,12 +177,16 @@ export default function ItemsScreen({ items, onPressItem, onDelete, onCreateProd
               </AppText>
             </Pressable>
             <Pressable
-              style={[styles.filterChip, filterCategory !== '' && styles.filterChipActive]}
+              style={[styles.filterChip, filterCategory !== null && styles.filterChipActive]}
               onPress={() => setFilterModal('category')}
             >
-              <CategoriesIcon size={14} color={filterCategory !== '' ? ACTIVE_COLOR : CARD_MUTED} />
-              <AppText style={[styles.filterChipLabel, filterCategory !== '' && styles.filterChipLabelActive]}>
-                {t.items.filterCategory}
+              {filterCategory !== null && (
+                <View style={[styles.filterColorDot, { backgroundColor: categories.find((c) => c.id === filterCategory)?.color ?? '#4F46E5' }]} />
+              )}
+              <AppText style={[styles.filterChipLabel, filterCategory !== null && styles.filterChipLabelActive]}>
+                {filterCategory !== null
+                  ? categories.find((c) => c.id === filterCategory)?.name ?? t.items.filterCategory
+                  : t.items.filterCategory}
               </AppText>
             </Pressable>
             {hasFilter && (
@@ -188,25 +205,59 @@ export default function ItemsScreen({ items, onPressItem, onDelete, onCreateProd
           contentContainerStyle={styles.list}
           renderItem={({ item }) => {
             const color = item.colorValue || avatarPalette[item.id % avatarPalette.length];
+            const stock = item.stock ?? 0;
+            const lowStock = stock > 0 && stock <= 3;
+            const outOfStock = stock <= 0;
+            const stockBadge = outOfStock
+              ? styles.stockBadgeOut
+              : lowStock
+                ? styles.stockBadgeLow
+                : styles.stockBadge;
+            const stockTextColor = outOfStock
+              ? '#D9534F'
+              : lowStock
+                ? '#B45309'
+                : '#4F46E5';
             return (
               <Pressable
                 style={styles.card}
                 onPress={() => onPressItem(item)}
               >
-                <View style={[styles.thumb, { backgroundColor: color }]}>
-                  <AppText bold style={[styles.thumbText, color === '#F5F5F5' && styles.thumbTextDark]}>{item.name.trim().charAt(0)}</AppText>
-                </View>
+                {item.photoUri ? (
+                  <Image
+                    source={{ uri: item.photoUri }}
+                    style={styles.thumb}
+                    contentFit="cover"
+                    transition={150}
+                  />
+                ) : (
+                  <View style={[styles.thumb, { backgroundColor: color }]}>
+                    <AppText bold style={[styles.thumbText, color === '#F5F5F5' && styles.thumbTextDark]}>{item.name.trim().charAt(0)}</AppText>
+                  </View>
+                )}
                 <View style={styles.info}>
                   <AppText bold numberOfLines={1} style={styles.name}>{item.name}</AppText>
-                  <AppText numberOfLines={1} style={styles.sub}>{item.size} · {item.qrCode}</AppText>
+                  <AppText numberOfLines={1} style={styles.sub}>{t.items.size}: {item.size}</AppText>
+                  {item.categoryName ? (
+                    <View style={styles.categoryPill}>
+                      <View style={[styles.categoryPillDot, { backgroundColor: item.categoryColor || '#4F46E5' }]} />
+                      <AppText style={styles.categoryPillText}>{item.categoryName}</AppText>
+                    </View>
+                  ) : null}
                 </View>
-                <AppText bold style={styles.price}>{formatKyat(item.price)}</AppText>
+                <View style={styles.rightCol}>
+                  <AppText bold style={styles.price}>{formatKyat(item.price)}</AppText>
+                  <View style={stockBadge}>
+                    <AppText bold style={[styles.stockLabel, { color: stockTextColor }]}>{t.sell.stock}</AppText>
+                    <AppText bold style={[styles.stockValue, { color: stockTextColor }]}>{toMM(stock)}</AppText>
+                  </View>
+                </View>
                 <Pressable
                   hitSlop={8}
                   onPress={() => onDelete(item)}
                   style={styles.deleteBtn}
                 >
-                  <TrashIcon size={20} color={CARD_MUTED} />
+                  <TrashIcon size={20} color="#DC2626" />
                 </Pressable>
               </Pressable>
             );
@@ -214,9 +265,12 @@ export default function ItemsScreen({ items, onPressItem, onDelete, onCreateProd
           ListEmptyComponent={<EmptyState title={t.items.empty} />}
         />
       ) : (
-        <View style={styles.comingSoon}>
-          <AppText style={styles.comingSoonText}>Coming Soon</AppText>
-        </View>
+        <CategoriesScreen
+          categories={categories}
+          items={items}
+          onEditCategory={onEditCategory}
+          onDeleteCategory={onDeleteCategory}
+        />
       )}
 
       <FilterModal
@@ -238,10 +292,10 @@ function FilterModal({
   type: FilterModal;
   onClose: () => void;
   selectedColor: string;
-  selectedCategory: string;
-  categories: string[];
+  selectedCategory: number | null;
+  categories: Category[];
   onSelectColor: (hex: string) => void;
-  onSelectCategory: (cat: string) => void;
+  onSelectCategory: (cat: number | null) => void;
 }) {
   return (
     <Modal visible={type !== null} transparent animationType="fade" onRequestClose={onClose}>
@@ -271,21 +325,22 @@ function FilterModal({
             <>
               <AppText bold style={styles.filterSheetTitle}>{t.items.filterCategory}</AppText>
               <Pressable
-                style={[styles.categoryOption, selectedCategory === '' && styles.categoryOptionActive]}
-                onPress={() => onSelectCategory('')}
+                style={[styles.categoryOption, styles.categoryOptionRow, selectedCategory === null && styles.categoryOptionActive]}
+                onPress={() => onSelectCategory(null)}
               >
-                <AppText style={[styles.categoryOptionText, selectedCategory === '' && styles.categoryOptionTextActive]}>
+                <AppText style={[styles.categoryOptionText, selectedCategory === null && styles.categoryOptionTextActive]}>
                   {t.items.all}
                 </AppText>
               </Pressable>
               {categories.map((cat) => (
                 <Pressable
-                  key={cat}
-                  style={[styles.categoryOption, selectedCategory === cat && styles.categoryOptionActive]}
-                  onPress={() => onSelectCategory(cat)}
+                  key={cat.id}
+                  style={[styles.categoryOption, styles.categoryOptionRow, selectedCategory === cat.id && styles.categoryOptionActive]}
+                  onPress={() => onSelectCategory(cat.id)}
                 >
-                  <AppText style={[styles.categoryOptionText, selectedCategory === cat && styles.categoryOptionTextActive]}>
-                    {cat}
+                  <View style={[styles.categoryOptionDot, { backgroundColor: cat.color }]} />
+                  <AppText style={[styles.categoryOptionText, selectedCategory === cat.id && styles.categoryOptionTextActive]}>
+                    {cat.name}
                   </AppText>
                 </Pressable>
               ))}
@@ -487,14 +542,61 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   thumbText: { color: '#FFFFFF', fontSize: 28, fontFamily: font.bold },
   thumbTextDark: { color: '#1A1A1A' },
   info: { flex: 1, marginLeft: 12, justifyContent: 'center' },
   name: { fontSize: 14, color: CARD_NAME, fontFamily: font.bold },
   sub: { fontSize: 12, color: CARD_MUTED, fontFamily: font.regular, marginTop: 4 },
-  price: { fontSize: 14, color: PRICE_COLOR, fontFamily: font.bold, marginRight: 8 },
+  price: { fontSize: 14, color: PRICE_COLOR, fontFamily: font.bold },
+  rightCol: {
+    alignItems: 'flex-end',
+    marginLeft: 8,
+    marginRight: 8,
+  },
   deleteBtn: { padding: 4 },
+  stockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    gap: 6,
+    marginTop: 6,
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  stockBadgeLow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    gap: 6,
+    marginTop: 6,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  stockBadgeOut: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    gap: 6,
+    marginTop: 6,
+    backgroundColor: '#FBEAE9',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  stockLabel: {
+    fontSize: 10,
+    fontFamily: font.bold,
+  },
+  stockValue: {
+    fontSize: 12,
+    fontFamily: font.bold,
+  },
   comingSoon: {
     flex: 1,
     alignItems: 'center',
@@ -560,6 +662,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
     marginBottom: 8,
   },
+  categoryOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  categoryOptionDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
   categoryOptionActive: {
     backgroundColor: '#EEF2FF',
   },
@@ -570,6 +684,27 @@ const styles = StyleSheet.create({
   },
   categoryOptionTextActive: {
     color: ACTIVE_COLOR,
+    fontFamily: font.bold,
+  },
+  categoryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    marginTop: 6,
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  categoryPillDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  categoryPillText: {
+    fontSize: 11,
+    color: '#374151',
     fontFamily: font.bold,
   },
 });

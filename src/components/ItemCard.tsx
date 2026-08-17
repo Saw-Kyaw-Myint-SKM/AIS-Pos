@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import type { ClothingItem } from '../db';
@@ -33,9 +34,18 @@ export default function ItemCard({ item, quantity, onChangeQty }: Props) {
       ]}
     >
       <View style={styles.topRow}>
-        <View style={[styles.avatar, { backgroundColor: color }]}>
-          <AppText bold style={styles.avatarText}>{item.name.trim().charAt(0)}</AppText>
-        </View>
+        {item.photoUri ? (
+          <Image
+            source={{ uri: item.photoUri }}
+            style={styles.avatar}
+            contentFit="cover"
+            transition={120}
+          />
+        ) : (
+          <View style={[styles.avatar, { backgroundColor: color }]}>
+            <AppText bold style={styles.avatarText}>{item.name.trim().charAt(0)}</AppText>
+          </View>
+        )}
         <View style={styles.stockWrap}>
           <AppText style={styles.stockLabel}>{t_stock}</AppText>
           <AppText
@@ -109,6 +119,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   avatarText: { color: '#fff', fontSize: 16 },
   stockWrap: {

@@ -13,26 +13,38 @@ type Props = {
 export default function QtyStepper({ value, onMinus, onPlus }: Props) {
   return (
     <View style={styles.row}>
-      <Pressable accessibilityRole="button" style={[styles.btn, styles.minus]} onPress={onMinus}>
+      <Pressable
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.btn, styles.minus, pressed && styles.btnPressed]}
+        onPress={onMinus}
+      >
         <AppText bold style={styles.minusText}>−</AppText>
       </Pressable>
       <AppText bold style={styles.value}>{toMM(value)}</AppText>
-      <Pressable accessibilityRole="button" style={[styles.btn, styles.plus]} onPress={onPlus}>
-        <AppText bold style={styles.plusText}>+</AppText>
+      <Pressable
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.btn, styles.plus, pressed && styles.btnPressed]}
+        onPress={onPlus}
+      >
+        <AppText bold style={styles.plusText}>＋</AppText>
       </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   btn: {
-    width: 44, height: 44, borderRadius: 22,
-    alignItems: 'center', justifyContent: 'center',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  minus: { backgroundColor: colors.dangerSoft },
-  plus: { backgroundColor: colors.accentSoft },
-  minusText: { color: colors.danger, fontSize: 22, lineHeight: 26 },
-  plusText: { color: colors.header, fontSize: 22, lineHeight: 26 },
-  value: { minWidth: 28, textAlign: 'center', fontSize: 17 },
+  minus: { backgroundColor: '#EEF0FF' },
+  plus: { backgroundColor: colors.sellBlue },
+  btnPressed: { opacity: 0.75 },
+  minusText: { color: colors.header, fontSize: 18, lineHeight: 22 },
+  plusText: { color: '#FFFFFF', fontSize: 18, lineHeight: 22 },
+  value: { minWidth: 26, textAlign: 'center', fontSize: 15, color: colors.text },
 });

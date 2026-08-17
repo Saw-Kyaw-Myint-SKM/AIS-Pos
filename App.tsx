@@ -7,15 +7,18 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AppText from './src/components/AppText';
 import CartSheet, { type CartLine } from './src/components/CartSheet';
 import {
-  createSale, deleteClothingItem, findClothingByQr, getClothingItems, getCustomerProfile,
-  getSales, getTodaySummary, initializeDatabase, saveClothingItem,
-  type ClothingItem, type CustomerProfile, type Sale, type TodaySummary,
+  createSale, deleteCategory, deleteClothingItem, findClothingByQr, getCategories,
+  getClothingItems, getCustomerProfile, getSales, getTodaySummary, initializeDatabase,
+  reorderCategories, saveCategory, saveClothingItem,
+  type Category, type ClothingItem, type CustomerProfile, type Sale, type TodaySummary,
 } from './src/db';
 import { scanFormatLabel, t } from './src/i18n';
 import HistoryScreen from './src/screens/HistoryScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import ItemFormScreen, { emptyForm, itemToForm } from './src/screens/ItemFormScreen';
 import type { ItemFormValue } from './src/screens/ItemFormScreen';
+import CategoryFormScreen, { emptyCategoryForm, categoryToForm } from './src/screens/CategoryFormScreen';
+import type { CategoryFormValue } from './src/screens/CategoryFormScreen';
 import ItemsScreen from './src/screens/ItemsScreen';
 import ReceiptScreen from './src/screens/ReceiptScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
@@ -33,7 +36,8 @@ type Route =
   | { name: 'history' }
   | { name: 'receipt'; saleId: number }
   | { name: 'saleDetail'; saleId: number }
-  | { name: 'itemForm'; itemId?: number };
+  | { name: 'itemForm'; itemId?: number }
+  | { name: 'categoryForm'; categoryId?: number };
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
@@ -68,11 +72,13 @@ function PosApp() {
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [route, setRoute] = useState<Route>({ name: 'home' });
   const [items, setItems] = useState<ClothingItem[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [today, setToday] = useState<TodaySummary>({ total: 0, saleCount: 0, itemCount: 0 });
   const [cart, setCart] = useState<Record<number, number>>({});
   const [cartOpen, setCartOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [lastScannedItem, setLastScannedItem] = useState<ClothingItem | null>(null);
   const [toast, setToast] = useState('');
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -103,10 +109,11 @@ function PosApp() {
   }, [showToast]);
 
   const refreshAll = useCallback(async () => {
-    const [itemRows, saleRows, summary] = await Promise.all([
-      getClothingItems(db), getSales(db), getTodaySummary(db),
+    const [itemRows, categoryRows, saleRows, summary] = await Promise.all([
+      getClothingItems(db), getCategories(db), getSales(db), getTodaySummary(db),
     ]);
     setItems(itemRows);
+    setCategories(categoryRows);
     setSales(saleRows);
     setToday(summary);
   }, [db]);
@@ -153,6 +160,7 @@ function PosApp() {
       return;
     }
     changeQuantity(item.id, 1);
+    setLastScannedItem(item);
     showToast(`${t.toast.added} (${scanFormatLabel(format)})`);
     if (route.name !== 'sell' && !keepOpen) setRoute({ name: 'sell' });
   }, [db, changeQuantity, showToast, route.name]);
@@ -162,19 +170,21 @@ function PosApp() {
     const saleId = await createSale(db, cartLines.map((l) => l.item), cart);
     setCart({});
     setCartOpen(false);
+    setLastScannedItem(null);
     await refreshAll();
     setRoute({ name: 'receipt', saleId });
   }, [db, cartLines, cart, refreshAll]);
 
   const clearCart = useCallback(() => {
     setCart({});
+    setLastScannedItem(null);
     showToast(t.toast.cleared);
   }, [showToast]);
 
   const saveItem = useCallback(async (form: ItemFormValue) => {
     const price = Number(form.price);
     const stock = Number(form.stock) || 0;
-    if (!form.name.trim() || !form.size.trim() || !form.qrCode.trim() || !Number.isFinite(price) || price < 0) {
+    if (!form.name.trim() || !form.categoryId || !Number.isFinite(price) || price < 0) {
       Alert.alert(t.items.invalidTitle, t.items.invalidBody);
       return;
     }
@@ -185,10 +195,11 @@ function PosApp() {
         size: form.size.trim(),
         qrCode: form.qrCode.trim(),
         price,
-        category: form.category,
+        categoryId: form.categoryId,
         stock,
         choiceType: form.choiceType,
         colorValue: form.colorValue,
+        photoUri: form.photoUri,
         note: form.note,
       });
       setRoute({ name: 'clothes' });
@@ -198,6 +209,47 @@ function PosApp() {
       Alert.alert(t.items.dupTitle, t.items.dupBody);
     }
   }, [db, refreshAll, showToast]);
+
+  const saveCategoryHandler = useCallback(async (form: CategoryFormValue) => {
+    const name = form.name.trim();
+    if (!name) {
+      Alert.alert(t.items.categoryRequired);
+      return;
+    }
+    const duplicate = categories.find(
+      (c) => c.name.toLowerCase() === name.toLowerCase() && c.id !== form.id,
+    );
+    if (duplicate) {
+      Alert.alert(t.items.categoryDuplicate);
+      return;
+    }
+    try {
+      await saveCategory(db, { id: form.id ?? undefined, name, color: form.color });
+      await refreshAll();
+      showToast(t.items.categorySaved);
+      setRoute({ name: 'clothes' });
+    } catch {
+      Alert.alert(t.items.categoryDuplicate);
+    }
+  }, [categories, db, refreshAll, showToast]);
+
+  const deleteCategoryHandler = useCallback(async (category: Category) => {
+    await deleteCategory(db, category.id);
+    await refreshAll();
+    showToast(t.items.categoryDeleted);
+  }, [db, refreshAll, showToast]);
+
+  const moveCategory = useCallback(async (category: Category, direction: 'up' | 'down') => {
+    const idx = categories.findIndex((c) => c.id === category.id);
+    if (idx < 0) return;
+    const next = direction === 'up' ? idx - 1 : idx + 1;
+    if (next < 0 || next >= categories.length) return;
+    const reordered = [...categories];
+    const [moved] = reordered.splice(idx, 1);
+    reordered.splice(next, 0, moved);
+    await reorderCategories(db, reordered.map((c) => c.id));
+    await refreshAll();
+  }, [categories, db, refreshAll]);
 
   const confirmDelete = useCallback((item: ClothingItem) => {
     Alert.alert(t.items.deleteTitle, item.name, [
@@ -256,6 +308,7 @@ function PosApp() {
         {route.name === 'sell' && (
           <SellScreen
             items={items}
+            categories={categories}
             cart={cart}
             cartCount={cartCount}
             cartTotal={cartTotal}
@@ -269,10 +322,15 @@ function PosApp() {
           <View style={{ flex: 1, paddingBottom: 90 }}>
             <ItemsScreen
               items={items}
+              categories={categories}
               onPressItem={(item) => setRoute({ name: 'itemForm', itemId: item.id })}
               onDelete={confirmDelete}
               onCreateProduct={() => setRoute({ name: 'itemForm' })}
-              onCreateCategory={() => showToast('Coming Soon')}
+              onCreateCategory={() => setRoute({ name: 'categoryForm' })}
+              onEditCategory={(category) => setRoute({ name: 'categoryForm', categoryId: category.id })}
+              onDeleteCategory={deleteCategoryHandler}
+              onMoveCategoryUp={(category) => moveCategory(category, 'up')}
+              onMoveCategoryDown={(category) => moveCategory(category, 'down')}
             />
           </View>
         )}
@@ -298,8 +356,28 @@ function PosApp() {
         {route.name === 'itemForm' && (
           <ItemFormScreen
             initial={route.itemId ? itemToForm(items.find((i) => i.id === route.itemId)!) : emptyForm}
+            categories={categories}
             onBack={() => setRoute({ name: 'clothes' })}
             onSave={saveItem}
+            onCreateCategory={() => setRoute({ name: 'categoryForm' })}
+          />
+        )}
+        {route.name === 'categoryForm' && (
+          <CategoryFormScreen
+            initial={
+              route.categoryId
+                ? categoryToForm(categories.find((c) => c.id === route.categoryId)!)
+                : emptyCategoryForm
+            }
+            categories={categories}
+            onBack={() => setRoute({ name: 'clothes' })}
+            onSave={saveCategoryHandler}
+            onDelete={route.categoryId
+              ? (form) => {
+                  const cat = categories.find((c) => c.id === form.id);
+                  if (cat) deleteCategoryHandler(cat);
+                }
+              : undefined}
           />
         )}
       </View>
@@ -326,7 +404,15 @@ function PosApp() {
         onConfirm={confirmSale}
       />
 
-      <ScannerModal visible={scannerOpen} onClose={() => setScannerOpen(false)} onScanned={onScanned} />
+      <ScannerModal
+        visible={scannerOpen}
+        onClose={() => { setScannerOpen(false); setLastScannedItem(null); }}
+        onScanned={onScanned}
+        onOpenCart={() => setCartOpen(true)}
+        lastItem={lastScannedItem}
+        cart={cart}
+        cartOpen={cartOpen}
+      />
 
       {toast ? (
         <View style={styles.toast} pointerEvents="none">

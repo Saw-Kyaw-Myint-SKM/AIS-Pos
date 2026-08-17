@@ -5,8 +5,10 @@
   "dependencies": {
     "expo": "~54.0.36",
     "expo-camera": "~17.0.10",
+    "expo-file-system": "~19.0.20",
     "expo-font": "~14.0.12",
     "expo-image": "~3.0.11",
+    "expo-image-picker": "~16.1.4",
     "expo-sqlite": "~16.0.10",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",

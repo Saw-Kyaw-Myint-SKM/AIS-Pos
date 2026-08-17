@@ -32,7 +32,7 @@ export default function Receipt({ saleId }: Props) {
 
   return (
     <View style={styles.paper}>
-      <AppText bold style={styles.shop}>{t.appName}</AppText>
+      <AppText bold style={styles.shop}>AISource MM</AppText>
       <AppText style={styles.receiptLabel}>{t.receipt.title}</AppText>
       <AppText style={styles.meta}>{t.receipt.billNo} #{toMM(sale.id)}</AppText>
       <AppText style={styles.meta}>{formatDateTimeMM(sale.createdAt)}</AppText>
@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
   lineMeta: { color: colors.muted, fontSize: 12, marginTop: 2 },
   lineAmount: { fontSize: 14, color: colors.header },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  totalLabel: { fontSize: 17, color: colors.text },
-  totalValue: { fontSize: 24, color: colors.success },
+  totalLabel: { fontSize: 15, color: colors.text },
+  totalValue: { fontSize: 20, color: colors.success },
   thanks: { textAlign: 'center', color: colors.muted, fontSize: 13 },
 });

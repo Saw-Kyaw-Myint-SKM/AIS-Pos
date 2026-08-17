@@ -311,3 +311,6 @@ open-orc run --workflow design-implement --from .open-orc/inbox/your-spec.md
 Agents: `.opencode/agent/figma-*.md`  
 Rules: `.open-orc/specs/_rules/design-implement.md`  
 Format templates: `.open-orc/formats/design.md`, `.open-orc/formats/bugfix.md`
+
+
+Project Main color `#3B3F76`

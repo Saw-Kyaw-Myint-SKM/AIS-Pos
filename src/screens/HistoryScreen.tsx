@@ -47,15 +47,15 @@ export default function HistoryScreen({ sales, todayTotal, onOpen }: Props) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  header: { backgroundColor: colors.header, paddingHorizontal: 16, paddingVertical: 14 },
+  screen: { flex: 1, backgroundColor: '#F5F5F5' },
+  header: { backgroundColor: '#4A6CF7', paddingHorizontal: 16, paddingVertical: 14 },
   title: { color: '#fff', fontSize: 20 },
   todayCard: {
-    backgroundColor: colors.successSoft, marginHorizontal: 16, marginTop: 14,
+    backgroundColor: '#EEF2FF', marginHorizontal: 16, marginTop: 14,
     borderRadius: radius.lg, padding: 16, alignItems: 'center',
   },
-  todayLabel: { color: colors.success, fontSize: 13 },
-  todayValue: { color: colors.header, fontSize: 24, marginTop: 4 },
+  todayLabel: { color: colors.muted, fontSize: 13 },
+  todayValue: { color: '#4A6CF7', fontSize: 24, marginTop: 4 },
   list: { padding: 16, paddingBottom: 28 },
   card: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -63,7 +63,7 @@ const styles = StyleSheet.create({
     padding: 14, marginBottom: 10, ...shadow,
   },
   billBadge: {
-    minWidth: 52, height: 44, borderRadius: 12, backgroundColor: colors.accentSoft,
+    minWidth: 52, height: 44, borderRadius: 12, backgroundColor: '#EEF2FF',
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8,
   },
   billText: { color: colors.header, fontSize: 14 },

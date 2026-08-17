@@ -34,9 +34,9 @@ export default function ReceiptScreen({ saleId, onNewSale, onViewHistory }: Prop
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: '#F5F5F5' },
   successBand: {
-    backgroundColor: colors.success, alignItems: 'center',
+    backgroundColor: '#4A6CF7', alignItems: 'center',
     paddingTop: 22, paddingBottom: 18,
   },
   check: {
@@ -47,9 +47,9 @@ const styles = StyleSheet.create({
   checkText: { color: '#fff', fontSize: 26 },
   done: { color: '#fff', fontSize: 17 },
   scroll: { paddingBottom: 8 },
-  footer: { padding: 16, gap: 10, backgroundColor: colors.bg },
-  primaryBtn: { backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: 15, alignItems: 'center' },
-  primaryText: { color: '#fff', fontSize: 16 },
-  secondaryBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingVertical: 13, alignItems: 'center' },
-  secondaryText: { color: colors.header, fontSize: 14 },
+  footer: { padding: 16, gap: 10, backgroundColor: '#F5F5F5' },
+  primaryBtn: { backgroundColor: '#4A6CF7', borderRadius: radius.md, paddingVertical: 11, alignItems: 'center' },
+  primaryText: { color: '#fff', fontSize: 14 },
+  secondaryBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingVertical: 9, alignItems: 'center' },
+  secondaryText: { color: colors.header, fontSize: 13 },
 });

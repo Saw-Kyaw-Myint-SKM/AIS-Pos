@@ -28,6 +28,7 @@ export const colors = {
   iconRose: '#E11D48',
   iconGreen: '#10B981',
   accentBlue: '#3B3F76',
+  sellBlue: '#4A6CF7',
 };
 
 export const spacing = (n: number): number => n * 4;

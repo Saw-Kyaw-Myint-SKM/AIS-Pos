@@ -3,12 +3,13 @@ import {
   Animated,
   Easing,
   FlatList,
+  Modal,
   Pressable,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
-import type { ClothingItem } from '../db';
+import type { Category, ClothingItem } from '../db';
 import { formatKyat, t, toMM } from '../i18n';
 import { colors, font, radius, shadow } from '../theme';
 import AppText from '../components/AppText';
@@ -16,13 +17,16 @@ import EmptyState from '../components/EmptyState';
 import ItemCard from '../components/ItemCard';
 import {
   BackArrowIcon,
+  CartIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   ScanIcon,
   SearchIcon,
 } from '../components/ServiceIcon';
 
 type Props = {
   items: ClothingItem[];
+  categories: Category[];
   cart: Record<number, number>;
   cartCount: number;
   cartTotal: number;
@@ -34,6 +38,7 @@ type Props = {
 
 export default function SellScreen({
   items,
+  categories,
   cart,
   cartCount,
   cartTotal,
@@ -44,6 +49,8 @@ export default function SellScreen({
 }: Props) {
   const [query, setQuery] = useState('');
   const [customPrice, setCustomPrice] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
+  const [categorySheetOpen, setCategorySheetOpen] = useState(false);
   const toggleAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -57,14 +64,16 @@ export default function SellScreen({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
-      (item) =>
+    return items.filter((item) => {
+      if (categoryFilter !== null && item.categoryId !== categoryFilter) return false;
+      if (!q) return true;
+      return (
         item.name.toLowerCase().includes(q) ||
         item.size.toLowerCase().includes(q) ||
-        item.qrCode.toLowerCase().includes(q),
-    );
-  }, [items, query]);
+        item.qrCode.toLowerCase().includes(q)
+      );
+    });
+  }, [items, query, categoryFilter]);
 
   return (
     <View style={styles.screen}>
@@ -157,9 +166,21 @@ export default function SellScreen({
             placeholderTextColor={colors.muted}
             style={styles.searchInput}
           />
-          <View style={styles.chevronWrap}>
-            <ChevronDownIcon size={22} color="#1D1B20" />
-          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="category-filter"
+            onPress={() => setCategorySheetOpen(true)}
+            style={({ pressed }) => [
+              styles.chevronWrap,
+              categoryFilter !== null && styles.chevronWrapActive,
+              pressed && styles.chevronWrapPressed,
+            ]}
+          >
+            <ChevronDownIcon
+              size={22}
+              color={categoryFilter !== null ? '#FFFFFF' : '#1D1B20'}
+            />
+          </Pressable>
         </View>
       </View>
 
@@ -188,27 +209,67 @@ export default function SellScreen({
         <Pressable
           accessibilityRole="button"
           onPress={onOpenCart}
-          style={({ pressed }) => [styles.cartBar, pressed && { opacity: 0.9 }]}
+          style={({ pressed }) => [styles.cartBar, pressed && styles.cartBarPressed]}
         >
           <View style={styles.cartLeft}>
-            <View style={styles.countBadge}>
-              <AppText bold style={styles.countText}>
-                {toMM(cartCount)}
-              </AppText>
+            <View style={styles.cartIconWrap}>
+              <CartIcon size={22} color="#FFFFFF" />
+              <View style={styles.countBadge}>
+                <AppText bold style={styles.countBadgeText}>
+                  {toMM(cartCount)}
+                </AppText>
+              </View>
             </View>
-            <AppText bold style={styles.cartLabel}>
-              {t.sell.cart}
-            </AppText>
+            <AppText bold style={styles.cartLabel}>{t.sell.cart}</AppText>
           </View>
-          <AppText bold style={styles.cartTotal}>
-            {formatKyat(cartTotal)} ›
-          </AppText>
+          <View style={styles.cartRight}>
+            <AppText bold style={styles.cartTotal}>{formatKyat(cartTotal)}</AppText>
+            <ChevronRightIcon size={18} color="#FFFFFF" />
+          </View>
         </Pressable>
       ) : (
         <View style={styles.hintBar}>
           <AppText style={styles.hintText}>{t.sell.tapToAdd}</AppText>
         </View>
       )}
+
+      <Modal
+        visible={categorySheetOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setCategorySheetOpen(false)}
+      >
+        <View style={styles.filterOverlay}>
+          <Pressable style={styles.filterBackdrop} onPress={() => setCategorySheetOpen(false)} />
+          <View style={styles.filterSheet}>
+            <View style={styles.grabber} />
+            <AppText bold style={styles.filterSheetTitle}>{t.items.filterCategory}</AppText>
+            <Pressable
+              style={[styles.categoryOption, categoryFilter === null && styles.categoryOptionActive]}
+              onPress={() => { setCategoryFilter(null); setCategorySheetOpen(false); }}
+            >
+              <AppText style={[styles.categoryOptionText, categoryFilter === null && styles.categoryOptionTextActive]}>
+                {t.sell.categoryAll}
+              </AppText>
+            </Pressable>
+            {categories.map((cat) => {
+              const active = categoryFilter === cat.id;
+              return (
+                <Pressable
+                  key={cat.id}
+                  style={[styles.categoryOption, active && styles.categoryOptionActive]}
+                  onPress={() => { setCategoryFilter(cat.id); setCategorySheetOpen(false); }}
+                >
+                  <View style={[styles.categoryDot, { backgroundColor: cat.color }]} />
+                  <AppText style={[styles.categoryOptionText, active && styles.categoryOptionTextActive]}>
+                    {cat.name}
+                  </AppText>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -262,7 +323,15 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
     borderLeftColor: colors.border,
     marginLeft: 4,
+    borderRadius: 14,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
   },
+  chevronWrapActive: {
+    backgroundColor: '#4A6CF7',
+    borderLeftColor: '#4A6CF7',
+  },
+  chevronWrapPressed: { opacity: 0.7 },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -301,29 +370,49 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
-    bottom: 16,
-    backgroundColor: colors.header,
-    borderRadius: radius.md,
+    bottom: 24,
+    backgroundColor: colors.sellBlue,
+    borderRadius: radius.lg,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 14,
-    ...shadow,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
-  cartLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  countBadge: {
-    minWidth: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.primary,
+  cartBarPressed: { opacity: 0.92, transform: [{ scale: 0.99 }] },
+  cartLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  cartIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.22)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
+    position: 'relative',
   },
-  countText: { color: '#fff', fontSize: 14 },
-  cartLabel: { color: '#fff', fontSize: 16 },
-  cartTotal: { color: '#fff', fontSize: 17 },
+  countBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  countBadgeText: { color: '#FFFFFF', fontSize: 11, lineHeight: 14 },
+  cartLabel: { color: '#FFFFFF', fontSize: 16 },
+  cartRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  cartTotal: { color: '#FFFFFF', fontSize: 17 },
   hintBar: {
     position: 'absolute',
     left: 16,
@@ -333,4 +422,61 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   hintText: { color: colors.muted, fontSize: 12 },
+  filterOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  filterBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  filterSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    paddingTop: 8,
+    ...shadow,
+  },
+  grabber: {
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E5E7EA',
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  filterSheetTitle: {
+    fontSize: 16,
+    color: '#1D1B20',
+    marginBottom: 10,
+    fontFamily: font.bold,
+  },
+  categoryOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  categoryOptionActive: {
+    backgroundColor: '#EEF2FF',
+  },
+  categoryDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+  },
+  categoryOptionText: {
+    fontSize: 14,
+    color: '#1D1B20',
+    fontFamily: font.regular,
+  },
+  categoryOptionTextActive: {
+    color: '#4A6CF7',
+    fontFamily: font.bold,
+  },
 });
