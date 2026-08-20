@@ -490,9 +490,13 @@ export const SETTING_SHOP_NAME_UNLOCKED = 'shop_name_unlocked';
 export const SETTING_PRINTER_TARGET = 'printer_target';
 export const SETTING_PRINTER_DEVICE_NAME = 'printer_device_name';
 export const SETTING_PRINTER_PAPER_WIDTH = 'printer_paper_width';
+export const SETTING_PRINTER_MODE = 'printer_mode';
+export const SETTING_PRINTER_AUTO_CUT = 'printer_auto_cut';
 
 export type PaperWidth = '58' | '80';
+export type PrinterMode = 'epson' | 'mock';
 export const DEFAULT_PAPER_WIDTH: PaperWidth = '58';
+export const DEFAULT_PRINTER_MODE: PrinterMode = 'epson';
 
 export async function getAppSetting(db: SQLiteDatabase, key: string): Promise<string | null> {
   const row = await db.getFirstAsync<{ value: string }>(

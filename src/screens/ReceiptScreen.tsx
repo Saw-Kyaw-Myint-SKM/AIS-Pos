@@ -1,7 +1,7 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { getSale, getSaleItems, type PaperWidth } from '../db';
+import { getSale, getSaleItems, type PaperWidth, type PrinterMode } from '../db';
 import { t } from '../i18n';
 import { exportReceiptPdf } from '../receiptHtml';
 import { colors, radius } from '../theme';
@@ -13,9 +13,11 @@ import { PrinterIcon } from '../components/ServiceIcon';
 type Props = {
   saleId: number;
   shopName: string;
+  printerMode: PrinterMode;
   printerTarget: string;
   printerDeviceName: string;
   paperWidth: PaperWidth;
+  autoCut: boolean;
   onSelectPrinter: () => void;
   onNewSale: () => void;
   onViewHistory: () => void;
@@ -25,9 +27,11 @@ type Props = {
 export default function ReceiptScreen({
   saleId,
   shopName,
+  printerMode,
   printerTarget,
   printerDeviceName,
   paperWidth,
+  autoCut,
   onSelectPrinter,
   onNewSale,
   onViewHistory,
@@ -52,7 +56,7 @@ export default function ReceiptScreen({
   };
 
   const handlePrint = () => {
-    if (!printerTarget) {
+    if (printerMode === 'epson' && !printerTarget) {
       onToast(t.printer.notSelected);
       onSelectPrinter();
       return;
@@ -99,11 +103,13 @@ export default function ReceiptScreen({
         saleId={saleId}
         shopName={shopName}
         paperWidth={paperWidth}
+        printerMode={printerMode}
         printerTarget={printerTarget}
         printerDeviceName={printerDeviceName}
+        autoCut={autoCut}
         onClose={() => setPrintOpen(false)}
-        onPrinted={() => onToast(t.printer.printed)}
-        onError={() => onToast(t.printer.error)}
+        onPrinted={() => onToast(printerMode === 'mock' ? t.printer.mockPrinted : t.printer.printed)}
+        onError={(code) => onToast(code === 'send_unknown' ? t.printer.sendUnknown : t.printer.error)}
       />
     </View>
   );

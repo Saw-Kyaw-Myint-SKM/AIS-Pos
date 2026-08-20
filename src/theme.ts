@@ -40,7 +40,7 @@ export const font = {
   bold: 'Pyidaungsu-Bold',
 };
 
-export const avatarPalette = ['#6366F1', '#8B5CF6', '#3B82F6', '#0EA5E9', '#E11D48', '#475569'];
+export const avatarPalette = ['#3B3F76', '#8B5CF6', '#3B82F6', '#0EA5E9', '#E11D48', '#475569'];
 
 export const shadow = {
   shadowColor: '#22302B',

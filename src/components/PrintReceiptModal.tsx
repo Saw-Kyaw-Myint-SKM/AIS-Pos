@@ -10,9 +10,20 @@ import {
 } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getSale, getSaleItems, type PaperWidth, type Sale, type SaleItem } from '../db';
+import {
+  getSale,
+  getSaleItems,
+  type PaperWidth,
+  type PrinterMode,
+  type Sale,
+  type SaleItem,
+} from '../db';
 import { t } from '../i18n';
-import { printImageToThermal } from '../thermalPrint';
+import {
+  printImageToThermal,
+  ThermalPrintError,
+  type ThermalPrintErrorCode,
+} from '../thermalPrint';
 import { colors, radius } from '../theme';
 import AppText from './AppText';
 import PrintableReceipt from './PrintableReceipt';
@@ -23,11 +34,20 @@ type Props = {
   saleId: number;
   shopName: string;
   paperWidth: PaperWidth;
+  printerMode: PrinterMode;
   printerTarget: string;
   printerDeviceName: string;
+  autoCut: boolean;
   onClose: () => void;
   onPrinted: () => void;
-  onError: () => void;
+  onError: (code: ThermalPrintErrorCode) => void;
+};
+
+const errorMessage = (code: ThermalPrintErrorCode): string => {
+  if (code === 'connect_timeout') return t.printer.connectTimeout;
+  if (code === 'offline') return t.printer.offline;
+  if (code === 'send_unknown') return t.printer.sendUnknown;
+  return t.printer.error;
 };
 
 export default function PrintReceiptModal({
@@ -35,8 +55,10 @@ export default function PrintReceiptModal({
   saleId,
   shopName,
   paperWidth,
+  printerMode,
   printerTarget,
   printerDeviceName,
+  autoCut,
   onClose,
   onPrinted,
   onError,
@@ -47,11 +69,13 @@ export default function PrintReceiptModal({
   const [items, setItems] = useState<SaleItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [printing, setPrinting] = useState(false);
+  const [printError, setPrintError] = useState<ThermalPrintErrorCode | null>(null);
 
   useEffect(() => {
     if (!visible) return;
     let alive = true;
     setLoading(true);
+    setPrintError(null);
     (async () => {
       const [saleRow, itemRows] = await Promise.all([getSale(db, saleId), getSaleItems(db, saleId)]);
       if (!alive) return;
@@ -67,6 +91,7 @@ export default function PrintReceiptModal({
   const handlePrint = async () => {
     if (!sale || printing) return;
     setPrinting(true);
+    setPrintError(null);
     try {
       const uri = await captureRef(printRef, {
         format: 'png',
@@ -77,11 +102,16 @@ export default function PrintReceiptModal({
         target: printerTarget,
         deviceName: printerDeviceName,
         paperWidth,
+        mode: printerMode,
+        autoCut,
       });
       onPrinted();
       onClose();
-    } catch {
-      onError();
+    } catch (error) {
+      const code = error instanceof ThermalPrintError ? error.code : 'unknown';
+      setPrintError(code);
+      onError(code);
+    } finally {
       setPrinting(false);
     }
   };
@@ -115,10 +145,7 @@ export default function PrintReceiptModal({
             <AppText style={styles.muted}>—</AppText>
           </View>
         ) : (
-          <ScrollView
-            contentContainerStyle={styles.scroll}
-            showsVerticalScrollIndicator={false}
-          >
+          <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
             <View style={styles.preview}>
               <PrintableReceipt
                 ref={printRef}
@@ -133,6 +160,11 @@ export default function PrintReceiptModal({
 
         {!loading && sale && (
           <View style={styles.footer}>
+            {printError ? (
+              <View style={styles.errorBox}>
+                <AppText style={styles.errorText}>{errorMessage(printError)}</AppText>
+              </View>
+            ) : null}
             <Pressable
               accessibilityRole="button"
               onPress={handlePrint}
@@ -144,7 +176,9 @@ export default function PrintReceiptModal({
               ) : (
                 <PrinterIcon size={18} color="#FFFFFF" />
               )}
-              <AppText style={styles.printText}>{t.printer.printConfirm}</AppText>
+              <AppText style={styles.printText}>
+                {printError ? t.printer.retry : t.printer.printConfirm}
+              </AppText>
             </Pressable>
           </View>
         )}
@@ -184,7 +218,16 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 16,
     backgroundColor: '#F5F5F5',
+    gap: 8,
   },
+  errorBox: {
+    backgroundColor: '#FFF0F0',
+    borderColor: '#F2B8B5',
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    padding: 10,
+  },
+  errorText: { color: '#A83232', fontSize: 13, textAlign: 'center' },
   printBtn: {
     flexDirection: 'row',
     alignItems: 'center',
