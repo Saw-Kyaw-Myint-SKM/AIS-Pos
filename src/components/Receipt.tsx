@@ -6,9 +6,9 @@ import { formatDateTimeMM, formatKyat, t, toMM } from '../i18n';
 import { colors, radius, shadow } from '../theme';
 import AppText from './AppText';
 
-type Props = { saleId: number };
+type Props = { saleId: number; shopName: string };
 
-export default function Receipt({ saleId }: Props) {
+export default function Receipt({ saleId, shopName }: Props) {
   const db = useSQLiteContext();
   const [sale, setSale] = useState<Sale | null>(null);
   const [items, setItems] = useState<SaleItem[]>([]);
@@ -32,7 +32,7 @@ export default function Receipt({ saleId }: Props) {
 
   return (
     <View style={styles.paper}>
-      <AppText bold style={styles.shop}>AISource MM</AppText>
+      <AppText bold style={styles.shop}>{shopName}</AppText>
       <AppText style={styles.receiptLabel}>{t.receipt.title}</AppText>
       <AppText style={styles.meta}>{t.receipt.billNo} #{toMM(sale.id)}</AppText>
       <AppText style={styles.meta}>{formatDateTimeMM(sale.createdAt)}</AppText>

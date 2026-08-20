@@ -1,16 +1,22 @@
 import { useFonts } from 'expo-font';
 import { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
+import * as DocumentPicker from 'expo-document-picker';
+import * as Sharing from 'expo-sharing';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AppText from './src/components/AppText';
 import CartSheet, { type CartLine } from './src/components/CartSheet';
 import {
-  createSale, deleteCategory, deleteClothingItem, findClothingByQr, getCategories,
-  getClothingItems, getCustomerProfile, getSales, getTodaySummary, initializeDatabase,
+  createSale, deleteCategory, deleteClothingItem, DEFAULT_PAPER_WIDTH, DEFAULT_SHOP_NAME, exportDatabaseFile, exportDatabaseToDownloads,
+  findClothingByQr,
+  getAppSetting, getCategories, getClothingItems, getCustomerProfile, getSales, getTodaySummary,
+  importDatabaseFile, initializeDatabase,
   reorderCategories, saveCategory, saveClothingItem,
-  type Category, type ClothingItem, type CustomerProfile, type Sale, type TodaySummary,
+  SETTING_PRINTER_DEVICE_NAME, SETTING_PRINTER_PAPER_WIDTH, SETTING_PRINTER_TARGET,
+  SETTING_SHOP_NAME, SETTING_SHOP_NAME_UNLOCKED, setAppSetting,
+  type Category, type ClothingItem, type CustomerProfile, type PaperWidth, type Sale, type TodaySummary,
 } from './src/db';
 import { scanFormatLabel, t } from './src/i18n';
 import HistoryScreen from './src/screens/HistoryScreen';
@@ -20,11 +26,13 @@ import type { ItemFormValue } from './src/screens/ItemFormScreen';
 import CategoryFormScreen, { emptyCategoryForm, categoryToForm } from './src/screens/CategoryFormScreen';
 import type { CategoryFormValue } from './src/screens/CategoryFormScreen';
 import ItemsScreen from './src/screens/ItemsScreen';
+import PrinterScreen from './src/screens/PrinterScreen';
 import ReceiptScreen from './src/screens/ReceiptScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import SaleDetailScreen from './src/screens/SaleDetailScreen';
 import ScannerModal from './src/screens/ScannerModal';
 import SellScreen from './src/screens/SellScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 import TabBar from './src/components/TabBar';
 import { colors } from './src/theme';
 
@@ -37,13 +45,16 @@ type Route =
   | { name: 'receipt'; saleId: number }
   | { name: 'saleDetail'; saleId: number }
   | { name: 'itemForm'; itemId?: number }
-  | { name: 'categoryForm'; categoryId?: number };
+  | { name: 'categoryForm'; categoryId?: number }
+  | { name: 'settings' }
+  | { name: 'printer' };
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
     'Pyidaungsu-Regular': require('./assets/fonts/Pyidaungsu-Regular.ttf'),
     'Pyidaungsu-Bold': require('./assets/fonts/Pyidaungsu-Bold.ttf'),
   });
+  const [dbVersion, setDbVersion] = useState(0);
 
   if (!fontsLoaded && !fontError) {
     return (
@@ -55,8 +66,12 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <SQLiteProvider databaseName="clothes-pos.db" onInit={initializeDatabase}>
-        <PosApp />
+      <SQLiteProvider
+        key={`db-${dbVersion}`}
+        databaseName="clothes-pos.db"
+        onInit={initializeDatabase}
+      >
+        <PosApp dbVersion={dbVersion} onDatabaseReloaded={() => setDbVersion((v) => v + 1)} />
       </SQLiteProvider>
     </SafeAreaProvider>
   );
@@ -66,7 +81,13 @@ const splashStyles = StyleSheet.create({
   box: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
 });
 
-function PosApp() {
+function PosApp({
+  dbVersion: _dbVersion,
+  onDatabaseReloaded,
+}: {
+  dbVersion: number;
+  onDatabaseReloaded: () => void;
+}) {
   const db = useSQLiteContext();
   const [booted, setBooted] = useState(false);
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
@@ -81,6 +102,12 @@ function PosApp() {
   const [lastScannedItem, setLastScannedItem] = useState<ClothingItem | null>(null);
   const [toast, setToast] = useState('');
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [shopName, setShopName] = useState(DEFAULT_SHOP_NAME);
+  const [shopUnlocked, setShopUnlocked] = useState(false);
+  const [printerTarget, setPrinterTarget] = useState('');
+  const [printerDeviceName, setPrinterDeviceName] = useState('');
+  const [paperWidth, setPaperWidthState] = useState<PaperWidth>(DEFAULT_PAPER_WIDTH);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -92,8 +119,18 @@ function PosApp() {
     let cancelled = false;
     (async () => {
       const existing = await getCustomerProfile(db);
+      const name = await getAppSetting(db, SETTING_SHOP_NAME);
+      const unlocked = await getAppSetting(db, SETTING_SHOP_NAME_UNLOCKED);
+      const pTarget = await getAppSetting(db, SETTING_PRINTER_TARGET);
+      const pName = await getAppSetting(db, SETTING_PRINTER_DEVICE_NAME);
+      const pWidth = await getAppSetting(db, SETTING_PRINTER_PAPER_WIDTH);
       if (cancelled) return;
       setProfile(existing);
+      setShopName(name ?? DEFAULT_SHOP_NAME);
+      setShopUnlocked(unlocked === '1');
+      setPrinterTarget(pTarget ?? '');
+      setPrinterDeviceName(pName ?? '');
+      setPaperWidthState((pWidth === '80' ? '80' : '58') as PaperWidth);
       setRoute(existing ? { name: 'home' } : { name: 'register' });
       setBooted(true);
     })();
@@ -107,6 +144,30 @@ function PosApp() {
     showToast(t.register.success);
     setRoute({ name: 'home' });
   }, [showToast]);
+
+  const unlockShopName = useCallback(async () => {
+    await setAppSetting(db, SETTING_SHOP_NAME_UNLOCKED, '1');
+    setShopUnlocked(true);
+  }, [db]);
+
+  const saveShopName = useCallback(async (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    await setAppSetting(db, SETTING_SHOP_NAME, trimmed);
+    setShopName(trimmed);
+  }, [db]);
+
+  const selectPrinter = useCallback(async (target: string, deviceName: string) => {
+    await setAppSetting(db, SETTING_PRINTER_TARGET, target);
+    await setAppSetting(db, SETTING_PRINTER_DEVICE_NAME, deviceName);
+    setPrinterTarget(target);
+    setPrinterDeviceName(deviceName);
+  }, [db]);
+
+  const setPaperWidth = useCallback(async (width: PaperWidth) => {
+    await setAppSetting(db, SETTING_PRINTER_PAPER_WIDTH, width);
+    setPaperWidthState(width);
+  }, [db]);
 
   const refreshAll = useCallback(async () => {
     const [itemRows, categoryRows, saleRows, summary] = await Promise.all([
@@ -180,6 +241,74 @@ function PosApp() {
     setLastScannedItem(null);
     showToast(t.toast.cleared);
   }, [showToast]);
+
+  const handleExportDatabase = useCallback(async () => {
+    if (settingsBusy) return;
+    setSettingsBusy(true);
+    try {
+      const uri = await exportDatabaseFile(db);
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/octet-stream',
+        dialogTitle: t.settings.saveFile,
+        UTI: 'public.database',
+      });
+      showToast(t.settings.saveSuccess);
+    } catch (error) {
+      const message = (error as Error)?.message ?? '';
+      if (message.toLowerCase().includes('cancel') || message.toLowerCase().includes('dismiss')) {
+        showToast(t.settings.saveCancelled);
+      } else {
+        showToast(t.settings.saveError);
+      }
+    } finally {
+      setSettingsBusy(false);
+    }
+  }, [db, settingsBusy, showToast]);
+
+  const handleExportToDownloads = useCallback(async () => {
+    if (settingsBusy) return;
+    setSettingsBusy(true);
+    try {
+      const ok = await exportDatabaseToDownloads(db);
+      showToast(ok ? t.settings.downloadsSaved : t.settings.permissionDenied);
+    } catch {
+      showToast(t.settings.saveError);
+    } finally {
+      setSettingsBusy(false);
+    }
+  }, [db, settingsBusy, showToast]);
+
+  const handleImportDatabase = useCallback(() => {
+    if (settingsBusy) return;
+    Alert.alert(t.settings.loadConfirmTitle, t.settings.loadConfirmBody, [
+      { text: t.settings.cancel, style: 'cancel' },
+      {
+        text: t.settings.yes,
+        style: 'destructive',
+        onPress: async () => {
+          setSettingsBusy(true);
+          try {
+            const picked = await DocumentPicker.getDocumentAsync({
+              copyToCacheDirectory: true,
+              type: '*/*',
+            });
+            if (picked.canceled || !picked.assets?.length) {
+              setSettingsBusy(false);
+              showToast(t.settings.loadCancelled);
+              return;
+            }
+            await importDatabaseFile(db, picked.assets[0].uri);
+            showToast(t.settings.loadSuccess);
+            onDatabaseReloaded();
+          } catch {
+            Alert.alert(t.settings.errorTitle, t.settings.loadError);
+          } finally {
+            setSettingsBusy(false);
+          }
+        },
+      },
+    ]);
+  }, [db, settingsBusy, showToast, onDatabaseReloaded]);
 
   const saveItem = useCallback(async (form: ItemFormValue) => {
     const price = Number(form.price);
@@ -298,11 +427,13 @@ function PosApp() {
           <HomeScreen
             summary={today}
             profile={profile}
+            items={items}
             onStartSale={() => setRoute({ name: 'sell' })}
             onOpenItems={() => setRoute({ name: 'clothes' })}
             onOpenHistory={() => setRoute({ name: 'history' })}
             onScan={() => setScannerOpen(true)}
-            onOpenSettings={() => showToast(t.home.setting)}
+            onOpenSettings={() => setRoute({ name: 'settings' })}
+            onOpenPrinter={() => setRoute({ name: 'printer' })}
           />
         )}
         {route.name === 'sell' && (
@@ -346,12 +477,27 @@ function PosApp() {
         {route.name === 'receipt' && (
           <ReceiptScreen
             saleId={route.saleId}
+            shopName={shopName}
+            printerTarget={printerTarget}
+            printerDeviceName={printerDeviceName}
+            paperWidth={paperWidth}
+            onSelectPrinter={() => setRoute({ name: 'printer' })}
             onNewSale={() => setRoute({ name: 'sell' })}
             onViewHistory={() => setRoute({ name: 'history' })}
+            onToast={showToast}
           />
         )}
         {route.name === 'saleDetail' && (
-          <SaleDetailScreen saleId={route.saleId} onBack={() => setRoute({ name: 'history' })} />
+          <SaleDetailScreen
+            saleId={route.saleId}
+            shopName={shopName}
+            printerTarget={printerTarget}
+            printerDeviceName={printerDeviceName}
+            paperWidth={paperWidth}
+            onSelectPrinter={() => setRoute({ name: 'printer' })}
+            onBack={() => setRoute({ name: 'history' })}
+            onToast={showToast}
+          />
         )}
         {route.name === 'itemForm' && (
           <ItemFormScreen
@@ -378,6 +524,31 @@ function PosApp() {
                   if (cat) deleteCategoryHandler(cat);
                 }
               : undefined}
+          />
+        )}
+        {route.name === 'settings' && (
+          <SettingsScreen
+            onBack={() => setRoute({ name: 'home' })}
+            onExport={handleExportDatabase}
+            onExportToDownloads={handleExportToDownloads}
+            onImport={handleImportDatabase}
+            busy={settingsBusy}
+            shopName={shopName}
+            shopUnlocked={shopUnlocked}
+            onUnlockShopName={unlockShopName}
+            onSaveShopName={saveShopName}
+          />
+        )}
+        {route.name === 'printer' && (
+          <PrinterScreen
+            onBack={() => setRoute({ name: 'home' })}
+            printerTarget={printerTarget}
+            printerDeviceName={printerDeviceName}
+            paperWidth={paperWidth}
+            shopName={shopName}
+            onSelectPrinter={selectPrinter}
+            onSetPaperWidth={setPaperWidth}
+            onToast={showToast}
           />
         )}
       </View>

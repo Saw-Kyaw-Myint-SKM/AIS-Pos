@@ -1,4 +1,14 @@
+import { Directory, File, Paths } from 'expo-file-system';
+import * as LegacyFileSystem from 'expo-file-system/legacy';
 import type { SQLiteDatabase } from 'expo-sqlite';
+
+function getDbDirectory(): Directory {
+  // expo-sqlite stores the DB under <document>/SQLite (see defaultDatabaseDirectory:
+  // context.filesDir + "/SQLite" on Android, documentDirectory + "/SQLite" on iOS).
+  const dir = new Directory(Paths.document, 'SQLite');
+  if (!dir.exists) dir.create({ intermediates: true });
+  return dir;
+}
 
 export type CustomerProfile = {
   id: number;
@@ -143,6 +153,10 @@ export async function initializeDatabase(db: SQLiteDatabase) {
       price REAL NOT NULL,
       quantity INTEGER NOT NULL CHECK (quantity > 0)
     );
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
 
   const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(clothes)');
@@ -169,18 +183,25 @@ export async function initializeDatabase(db: SQLiteDatabase) {
     await db.execAsync('ALTER TABLE clothes ADD COLUMN category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL');
   }
 
-  // Seed default categories if the table is empty.
-  const catCount = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM categories');
-  if (!catCount?.count) {
-    await db.withTransactionAsync(async () => {
-      for (let i = 0; i < DEFAULT_CATEGORIES.length; i++) {
-        const c = DEFAULT_CATEGORIES[i];
-        await db.runAsync(
-          'INSERT INTO categories (name, color, position) VALUES (?, ?, ?)',
-          c.name, c.color, i,
-        );
-      }
-    });
+  // Track first-run seeding with PRAGMA user_version so that a re-import of a
+  // backup (possibly containing zero items) does NOT re-seed sample data.
+  const versionRow = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+  const isFresh = !versionRow || versionRow.user_version === 0;
+
+  // Seed default categories if the table is empty (first run only).
+  if (isFresh) {
+    const catCount = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM categories');
+    if (!catCount?.count) {
+      await db.withTransactionAsync(async () => {
+        for (let i = 0; i < DEFAULT_CATEGORIES.length; i++) {
+          const c = DEFAULT_CATEGORIES[i];
+          await db.runAsync(
+            'INSERT INTO categories (name, color, position) VALUES (?, ?, ?)',
+            c.name, c.color, i,
+          );
+        }
+      });
+    }
   }
 
   // One-shot migration: copy clothes.category text -> category_id via find-or-create.
@@ -220,24 +241,30 @@ export async function initializeDatabase(db: SQLiteDatabase) {
     });
   }
 
-  const count = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM clothes');
-  if (!count?.count) {
-    const seedCats = await db.getAllAsync<{ id: number; name: string }>(
-      `SELECT id, name FROM categories ORDER BY position`,
-    );
-    const seedCategory = (name: string): number | null => {
-      const found = seedCats.find((c) => c.name === name);
-      return found ? found.id : null;
-    };
-    await db.runAsync(
-      `INSERT INTO clothes (qr_code, name, size, price, category_id) VALUES
-       (?, ?, ?, ?, ?), (?, ?, ?, ?, ?), (?, ?, ?, ?, ?), (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)`,
-      'SHIRT-WHITE-M', 'အင်္ကျီအဖြူ', 'M', 8500, seedCategory('အင်္ကျီ'),
-      'JEANS-BLUE-32', 'ဂျင်းဘောင်းဘီအပြာ', '32', 25000, seedCategory('ဘောင်းဘီ'),
-      'LONGYI-GREEN-FREE', 'လုံချည်အစိမ်း', 'Free', 12000, seedCategory('လုံချည်'),
-      'TSHIRT-BLACK-L', 'တီရှပ်အနက်', 'L', 9000, seedCategory('အင်္ကျီ'),
-      '2000000000017', 'လက်ကိုင်အိတ်အနက်', 'Free', 4500, seedCategory('အခြား'),
-    );
+  // Seed sample clothes only on a truly fresh database.
+  if (isFresh) {
+    const count = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM clothes');
+    if (!count?.count) {
+      const seedCats = await db.getAllAsync<{ id: number; name: string }>(
+        `SELECT id, name FROM categories ORDER BY position`,
+      );
+      const seedCategory = (name: string): number | null => {
+        const found = seedCats.find((c) => c.name === name);
+        return found ? found.id : null;
+      };
+      await db.runAsync(
+        `INSERT INTO clothes (qr_code, name, size, price, category_id) VALUES
+         (?, ?, ?, ?, ?), (?, ?, ?, ?, ?), (?, ?, ?, ?, ?), (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)`,
+        'SHIRT-WHITE-M', 'အင်္ကျီအဖြူ', 'M', 8500, seedCategory('အင်္ကျီ'),
+        'JEANS-BLUE-32', 'ဂျင်းဘောင်းဘီအပြာ', '32', 25000, seedCategory('ဘောင်းဘီ'),
+        'LONGYI-GREEN-FREE', 'လုံချည်အစိမ်း', 'Free', 12000, seedCategory('လုံချည်'),
+        'TSHIRT-BLACK-L', 'တီရှပ်အနက်', 'L', 9000, seedCategory('အင်္ကျီ'),
+        '2000000000017', 'လက်ကိုင်အိတ်အနက်', 'Free', 4500, seedCategory('အခြား'),
+      );
+    }
+
+    // Mark seeding as done so re-imports never re-seed.
+    await db.execAsync('PRAGMA user_version = 1');
   }
 
   // Flush any pending WAL state so closeAsync does not see unfinalized
@@ -452,4 +479,128 @@ export async function getTodaySummary(db: SQLiteDatabase): Promise<TodaySummary>
     saleCount: salesRow?.saleCount ?? 0,
     itemCount: itemsRow?.itemCount ?? 0,
   };
+}
+
+export const DEFAULT_SHOP_NAME = 'AISource MM';
+export const SHOP_UNLOCK_CODE = '123456';
+
+export const SETTING_SHOP_NAME = 'shop_name';
+export const SETTING_SHOP_NAME_UNLOCKED = 'shop_name_unlocked';
+
+export const SETTING_PRINTER_TARGET = 'printer_target';
+export const SETTING_PRINTER_DEVICE_NAME = 'printer_device_name';
+export const SETTING_PRINTER_PAPER_WIDTH = 'printer_paper_width';
+
+export type PaperWidth = '58' | '80';
+export const DEFAULT_PAPER_WIDTH: PaperWidth = '58';
+
+export async function getAppSetting(db: SQLiteDatabase, key: string): Promise<string | null> {
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM app_settings WHERE key = ?', key,
+  );
+  return row?.value ?? null;
+}
+
+export async function setAppSetting(db: SQLiteDatabase, key: string, value: string): Promise<void> {
+  await db.runAsync(
+    `INSERT INTO app_settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    key, value,
+  );
+}
+
+export const DATABASE_FILE_NAME = 'clothes-pos.db';
+
+export async function exportDatabaseFile(db: SQLiteDatabase): Promise<string> {
+  try {
+    await db.execAsync('PRAGMA wal_checkpoint(TRUNCATE);');
+  } catch {
+    // best effort — some versions may not support checkpointing
+  }
+  const bytes = await db.serializeAsync();
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const fileName = `backup-${ts}.db`;
+  const file = new File(Paths.cache, fileName);
+  if (!file.exists) file.create();
+  file.write(bytes);
+  return file.uri;
+}
+
+export async function exportDatabaseToDownloads(db: SQLiteDatabase): Promise<boolean> {
+  try {
+    await db.execAsync('PRAGMA wal_checkpoint(TRUNCATE);');
+  } catch {
+    // best effort — some versions may not support checkpointing
+  }
+  const bytes = await db.serializeAsync();
+  const base64 = bytesToBase64(bytes);
+
+  const downloadUri = LegacyFileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
+  const perm = await LegacyFileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(downloadUri);
+  if (!perm.granted) return false;
+
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const fileName = `ais_pos_backup-${ts}.db`;
+  const fileUri = await LegacyFileSystem.StorageAccessFramework.createFileAsync(
+    perm.directoryUri,
+    fileName,
+    'application/octet-stream',
+  );
+  await LegacyFileSystem.StorageAccessFramework.writeAsStringAsync(fileUri, base64, {
+    encoding: 'base64',
+  });
+  return true;
+}
+
+export async function importDatabaseFile(db: SQLiteDatabase, sourceUri: string): Promise<void> {
+  const bytes = await readPickedBytes(sourceUri);
+  if (!bytes || bytes.byteLength === 0) throw new Error('Picked file is empty');
+  try {
+    await db.closeAsync();
+  } catch {
+    // already closed or unavailable
+  }
+  const dir = getDbDirectory();
+  const dest = new File(dir, DATABASE_FILE_NAME);
+  if (!dest.exists) dest.create();
+  dest.write(bytes);
+
+  try {
+    const wal = new File(dir, DATABASE_FILE_NAME + '-wal');
+    if (wal.exists) wal.delete();
+  } catch {
+    // ignore
+  }
+  try {
+    const shm = new File(dir, DATABASE_FILE_NAME + '-shm');
+    if (shm.exists) shm.delete();
+  } catch {
+    // ignore
+  }
+}
+
+async function readPickedBytes(uri: string): Promise<Uint8Array> {
+  if (uri.startsWith('content://')) {
+    const base64 = await LegacyFileSystem.readAsStringAsync(uri, {
+      encoding: 'base64',
+    });
+    return base64ToBytes(base64);
+  }
+  const file = new File(uri);
+  if (!file.exists) throw new Error('Picked database file does not exist');
+  return file.bytes();
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = globalThis.atob(base64);
+  const len = binary.length;
+  const out = new Uint8Array(len);
+  for (let i = 0; i < len; i++) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  return globalThis.btoa(binary);
 }

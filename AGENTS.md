@@ -210,6 +210,13 @@ npm run typecheck  # tsc --noEmit
 
 ---
 
+## Database Backup / Restore (Settings screen)
+
+- Tap **ဆက်တင်များ** on the Home grid → **ဖိုင် သိမ်းရန်** exports the full SQLite DB as a single `.db` file.
+- **ဖိုင် ထည့်ရန်** imports a previously saved `.db` file (Alert confirmation required; current data is overwritten).
+- Implementation uses `expo-sqlite`'s in-place `serializeAsync()` / `deserializeAsync()` (no app restart required) plus `expo-document-picker` (`copyToCacheDirectory: true`) and `expo-file-system`'s `File.write()` / `File.bytes()`.
+- After import, `refreshAll()` is called so all in-memory state re-syncs from the new DB.
+
 ## Key Conventions
 
 1. **All text in Burmese** — never use English in UI strings. Use `t.*` from `i18n.ts`.

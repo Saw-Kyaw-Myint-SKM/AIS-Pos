@@ -8,16 +8,18 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { CustomerProfile, TodaySummary } from '../db';
+import type { ClothingItem, CustomerProfile, TodaySummary } from '../db';
 import { formatKyat, formatDateMM, t, toMM } from '../i18n';
 import { colors, font, radius, tileShadow } from '../theme';
 import AppText from '../components/AppText';
 import {
   DollarIcon,
   PackageIcon,
+  PrinterIcon,
   ReceiptIcon,
   ScanIcon,
   SettingsIcon,
+  StockAlertIcon,
 } from '../components/ServiceIcon';
 
 const LOGO = require('../../assets/source-mm-logo.png');
@@ -25,15 +27,19 @@ const { width: SCREEN_W } = Dimensions.get('window');
 const H_PAD = 24;
 const GAP = 12;
 const COL = (SCREEN_W - H_PAD * 2 - GAP * 2) / 3;
+const LOW_STOCK_THRESHOLD = 5;
+const noop = () => {};
 
 type Props = {
   summary: TodaySummary;
   profile: CustomerProfile | null;
+  items: ClothingItem[];
   onStartSale: () => void;
   onOpenItems: () => void;
   onOpenHistory: () => void;
   onScan: () => void;
   onOpenSettings: () => void;
+  onOpenPrinter: () => void;
 };
 
 type ServiceTile = {
@@ -42,16 +48,19 @@ type ServiceTile = {
   iconBg: string;
   Icon: React.ComponentType<{ size?: number; color?: string }>;
   onPress: () => void;
+  badgeCount?: number;
 };
 
 export default function HomeScreen({
   summary,
   profile,
+  items,
   onStartSale,
   onOpenItems,
   onOpenHistory,
   onScan,
   onOpenSettings,
+  onOpenPrinter,
 }: Props) {
   const insets = useSafeAreaInsets();
   const customerName = profile?.name?.trim() || t.appName;
@@ -62,11 +71,22 @@ export default function HomeScreen({
     { key: 'products', label: t.home.saleProduct, value: toMM(summary.itemCount) },
   ];
 
+  const lowStockCount = items.filter((i) => i.stock <= LOW_STOCK_THRESHOLD).length;
+
   const services: ServiceTile[] = [
     { key: 'sale', label: t.home.sale, iconBg: colors.iconIndigo, Icon: DollarIcon, onPress: onStartSale },
     { key: 'products', label: t.home.products, iconBg: colors.iconPurple, Icon: PackageIcon, onPress: onOpenItems },
     { key: 'history', label: t.home.salesHistory, iconBg: colors.iconBlue, Icon: ReceiptIcon, onPress: onOpenHistory },
     { key: 'scan', label: t.home.scan, iconBg: colors.iconCyan, Icon: ScanIcon, onPress: onScan },
+    {
+      key: 'stock',
+      label: t.home.stockAlert,
+      iconBg: colors.iconRose,
+      Icon: StockAlertIcon,
+      onPress: noop,
+      badgeCount: lowStockCount,
+    },
+    { key: 'printer', label: t.home.printer, iconBg: colors.iconSlate, Icon: PrinterIcon, onPress: onOpenPrinter },
     { key: 'setting', label: t.home.setting, iconBg: colors.iconSlate, Icon: SettingsIcon, onPress: onOpenSettings },
   ];
 
@@ -127,6 +147,13 @@ export default function HomeScreen({
               >
                 <View style={[styles.iconBox, { backgroundColor: item.iconBg }]}>
                   <Icon size={30} color="#FFFFFF" />
+                  {item.badgeCount != null && item.badgeCount > 0 ? (
+                    <View style={styles.badge}>
+                      <AppText bold style={styles.badgeText}>
+                        {toMM(item.badgeCount)}
+                      </AppText>
+                    </View>
+                  ) : null}
                 </View>
                 <AppText style={styles.serviceLabel} numberOfLines={2}>
                   {item.label}
@@ -274,5 +301,25 @@ const styles = StyleSheet.create({
     fontFamily: font.regular,
     textAlign: 'center',
     lineHeight: 16,
+  },
+  badge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    backgroundColor: colors.danger,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontFamily: font.bold,
+    lineHeight: 12,
   },
 });
