@@ -37,6 +37,32 @@ jest.mock("react-native-safe-area-context", () => {
   };
 });
 
+jest.mock("react-native-view-shot", () => ({
+  captureRef: jest.fn(async () => "file:///mock-receipt.png"),
+}));
+
+jest.mock("react-native-esc-pos-printer", () => {
+  class Printer {
+    constructor() {}
+    addQueueTask = async (task) => task();
+    connect = jest.fn(async () => undefined);
+    getStatus = jest.fn(async () => ({ online: { statusCode: 1 } }));
+    addImage = jest.fn(async () => undefined);
+    addFeedLine = jest.fn(async () => undefined);
+    addCut = jest.fn(async () => undefined);
+    sendData = jest.fn(async () => undefined);
+    disconnect = jest.fn(async () => undefined);
+  }
+  return {
+    Printer,
+    PrinterConstants: { TRUE: 1, COLOR_NONE: 0, MODE_MONO: 0, CUT_FEED: 0 },
+    DiscoveryFilterOption: { MODEL_ALL: 0, TRUE: 1, PORTTYPE_BLUETOOTH: 0 },
+    usePrintersDiscovery: () => ({
+      printers: [], isDiscovering: false, printerError: null,
+      start: jest.fn(), stop: jest.fn(),
+    }),
+  };
+});
 
 jest.mock("expo-file-system/legacy", () => ({
   StorageAccessFramework: {

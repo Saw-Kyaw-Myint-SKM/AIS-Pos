@@ -15,9 +15,11 @@ import {
   getAppSetting, getCategories, getClothingItems, getCustomerProfile, getSales, getTodaySummary,
   importDatabaseFile, initializeDatabase,
   reorderCategories, saveCategory, saveClothingItem,
-  DEFAULT_STOCK_ALERT_LIMIT, SETTING_PRINTER_PAPER_WIDTH,
+  DEFAULT_PRINTER_MODE, DEFAULT_STOCK_ALERT_LIMIT,
+  SETTING_PRINTER_AUTO_CUT, SETTING_PRINTER_DEVICE_NAME, SETTING_PRINTER_MODE,
+  SETTING_PRINTER_PAPER_WIDTH, SETTING_PRINTER_TARGET,
   SETTING_SHOP_NAME, SETTING_SHOP_NAME_UNLOCKED, SETTING_STOCK_ALERT_LIMIT, setAppSetting,
-  type Category, type ClothingItem, type CustomerProfile, type PaperWidth, type Sale, type TodaySummary,
+  type Category, type ClothingItem, type CustomerProfile, type PaperWidth, type PrinterMode, type Sale, type TodaySummary,
 } from './src/db';
 import { scanFormatLabel, t } from './src/i18n';
 import HistoryScreen from './src/screens/HistoryScreen';
@@ -112,7 +114,11 @@ function PosApp({
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [shopName, setShopName] = useState(DEFAULT_SHOP_NAME);
   const [shopUnlocked, setShopUnlocked] = useState(false);
+  const [printerTarget, setPrinterTarget] = useState('');
+  const [printerDeviceName, setPrinterDeviceName] = useState('');
+  const [printerMode, setPrinterModeState] = useState<PrinterMode>(DEFAULT_PRINTER_MODE);
   const [paperWidth, setPaperWidthState] = useState<PaperWidth>(DEFAULT_PAPER_WIDTH);
+  const [printerAutoCut, setPrinterAutoCutState] = useState(true);
   const [stockAlertLimit, setStockAlertLimit] = useState(DEFAULT_STOCK_ALERT_LIMIT);
 
   const showToast = useCallback((message: string) => {
@@ -127,7 +133,11 @@ function PosApp({
       const existing = await getCustomerProfile(db);
       const name = await getAppSetting(db, SETTING_SHOP_NAME);
       const unlocked = await getAppSetting(db, SETTING_SHOP_NAME_UNLOCKED);
+      const pTarget = await getAppSetting(db, SETTING_PRINTER_TARGET);
+      const pName = await getAppSetting(db, SETTING_PRINTER_DEVICE_NAME);
+      const pMode = await getAppSetting(db, SETTING_PRINTER_MODE);
       const pWidth = await getAppSetting(db, SETTING_PRINTER_PAPER_WIDTH);
+      const pAutoCut = await getAppSetting(db, SETTING_PRINTER_AUTO_CUT);
       const savedStockAlertLimit = await getAppSetting(db, SETTING_STOCK_ALERT_LIMIT);
       const parsedStockAlertLimit = Number(savedStockAlertLimit);
       const nextStockAlertLimit = Number.isSafeInteger(parsedStockAlertLimit) && parsedStockAlertLimit >= 0
@@ -137,7 +147,11 @@ function PosApp({
       setProfile(existing);
       setShopName(name ?? DEFAULT_SHOP_NAME);
       setShopUnlocked(unlocked === '1');
+      setPrinterTarget(pTarget ?? '');
+      setPrinterDeviceName(pName ?? '');
+      setPrinterModeState(pMode === 'mock' ? 'mock' : DEFAULT_PRINTER_MODE);
       setPaperWidthState((pWidth === '80' ? '80' : '58') as PaperWidth);
+      setPrinterAutoCutState(pAutoCut !== '0');
       setStockAlertLimit(nextStockAlertLimit);
       setRoute(existing ? { name: 'home' } : { name: 'register' });
       setBooted(true);
@@ -165,9 +179,26 @@ function PosApp({
     setShopName(trimmed);
   }, [db]);
 
+  const selectPrinter = useCallback(async (target: string, deviceName: string) => {
+    await setAppSetting(db, SETTING_PRINTER_TARGET, target);
+    await setAppSetting(db, SETTING_PRINTER_DEVICE_NAME, deviceName);
+    setPrinterTarget(target);
+    setPrinterDeviceName(deviceName);
+  }, [db]);
+
+  const setPrinterMode = useCallback(async (mode: PrinterMode) => {
+    await setAppSetting(db, SETTING_PRINTER_MODE, mode);
+    setPrinterModeState(mode);
+  }, [db]);
+
   const setPaperWidth = useCallback(async (width: PaperWidth) => {
     await setAppSetting(db, SETTING_PRINTER_PAPER_WIDTH, width);
     setPaperWidthState(width);
+  }, [db]);
+
+  const setPrinterAutoCut = useCallback(async (enabled: boolean) => {
+    await setAppSetting(db, SETTING_PRINTER_AUTO_CUT, enabled ? '1' : '0');
+    setPrinterAutoCutState(enabled);
   }, [db]);
 
   const saveStockAlertLimit = useCallback(async (limit: number) => {
@@ -517,7 +548,11 @@ function PosApp({
           <ReceiptScreen
             saleId={route.saleId}
             shopName={shopName}
+            printerMode={printerMode}
+            printerTarget={printerTarget}
+            printerDeviceName={printerDeviceName}
             paperWidth={paperWidth}
+            autoCut={printerAutoCut}
             onSelectPrinter={() => setRoute({ name: 'printer' })}
             onNewSale={() => setRoute({ name: 'sell' })}
             onViewHistory={() => setRoute({ name: 'history' })}
@@ -528,7 +563,11 @@ function PosApp({
           <SaleDetailScreen
             saleId={route.saleId}
             shopName={shopName}
+            printerMode={printerMode}
+            printerTarget={printerTarget}
+            printerDeviceName={printerDeviceName}
             paperWidth={paperWidth}
+            autoCut={printerAutoCut}
             onSelectPrinter={() => setRoute({ name: 'printer' })}
             onBack={() => setRoute({ name: 'history' })}
             onToast={showToast}
@@ -585,8 +624,16 @@ function PosApp({
         {route.name === 'printer' && (
           <PrinterScreen
             onBack={() => setRoute({ name: 'home' })}
+            printerMode={printerMode}
+            printerTarget={printerTarget}
+            printerDeviceName={printerDeviceName}
             paperWidth={paperWidth}
+            autoCut={printerAutoCut}
+            shopName={shopName}
+            onSelectPrinter={selectPrinter}
+            onSetPrinterMode={setPrinterMode}
             onSetPaperWidth={setPaperWidth}
+            onSetAutoCut={setPrinterAutoCut}
             onToast={showToast}
           />
         )}
