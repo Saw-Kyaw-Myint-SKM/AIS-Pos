@@ -27,9 +27,6 @@ const { width: SCREEN_W } = Dimensions.get('window');
 const H_PAD = 24;
 const GAP = 12;
 const COL = (SCREEN_W - H_PAD * 2 - GAP * 2) / 3;
-const LOW_STOCK_THRESHOLD = 5;
-const noop = () => {};
-
 type Props = {
   summary: TodaySummary;
   profile: CustomerProfile | null;
@@ -40,6 +37,8 @@ type Props = {
   onScan: () => void;
   onOpenSettings: () => void;
   onOpenPrinter: () => void;
+  onOpenStockAlert: () => void;
+  stockAlertLimit: number;
 };
 
 type ServiceTile = {
@@ -61,6 +60,8 @@ export default function HomeScreen({
   onScan,
   onOpenSettings,
   onOpenPrinter,
+  onOpenStockAlert,
+  stockAlertLimit,
 }: Props) {
   const insets = useSafeAreaInsets();
   const customerName = profile?.name?.trim() || t.appName;
@@ -71,7 +72,7 @@ export default function HomeScreen({
     { key: 'products', label: t.home.saleProduct, value: toMM(summary.itemCount) },
   ];
 
-  const lowStockCount = items.filter((i) => i.stock <= LOW_STOCK_THRESHOLD).length;
+  const lowStockCount = items.filter((i) => i.stock <= stockAlertLimit).length;
 
   const services: ServiceTile[] = [
     { key: 'sale', label: t.home.sale, iconBg: colors.iconIndigo, Icon: DollarIcon, onPress: onStartSale },
@@ -83,7 +84,7 @@ export default function HomeScreen({
       label: t.home.stockAlert,
       iconBg: colors.iconRose,
       Icon: StockAlertIcon,
-      onPress: noop,
+      onPress: onOpenStockAlert,
       badgeCount: lowStockCount,
     },
     { key: 'printer', label: t.home.printer, iconBg: colors.iconSlate, Icon: PrinterIcon, onPress: onOpenPrinter },

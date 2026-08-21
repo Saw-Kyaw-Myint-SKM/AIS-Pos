@@ -14,9 +14,9 @@ import {
   getAppSetting, getCategories, getClothingItems, getCustomerProfile, getSales, getTodaySummary,
   importDatabaseFile, initializeDatabase,
   reorderCategories, saveCategory, saveClothingItem,
-  DEFAULT_PRINTER_MODE, SETTING_PRINTER_AUTO_CUT, SETTING_PRINTER_DEVICE_NAME, SETTING_PRINTER_MODE,
+  DEFAULT_PRINTER_MODE, DEFAULT_STOCK_ALERT_LIMIT, SETTING_PRINTER_AUTO_CUT, SETTING_PRINTER_DEVICE_NAME, SETTING_PRINTER_MODE,
   SETTING_PRINTER_PAPER_WIDTH, SETTING_PRINTER_TARGET,
-  SETTING_SHOP_NAME, SETTING_SHOP_NAME_UNLOCKED, setAppSetting,
+  SETTING_SHOP_NAME, SETTING_SHOP_NAME_UNLOCKED, SETTING_STOCK_ALERT_LIMIT, setAppSetting,
   type Category, type ClothingItem, type CustomerProfile, type PaperWidth, type PrinterMode, type Sale, type TodaySummary,
 } from './src/db';
 import { scanFormatLabel, t } from './src/i18n';
@@ -34,6 +34,7 @@ import SaleDetailScreen from './src/screens/SaleDetailScreen';
 import ScannerModal from './src/screens/ScannerModal';
 import SellScreen from './src/screens/SellScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import StockAlertScreen from './src/screens/StockAlertScreen';
 import TabBar from './src/components/TabBar';
 import { colors } from './src/theme';
 
@@ -48,7 +49,8 @@ type Route =
   | { name: 'itemForm'; itemId?: number }
   | { name: 'categoryForm'; categoryId?: number }
   | { name: 'settings' }
-  | { name: 'printer' };
+  | { name: 'printer' }
+  | { name: 'stockAlert' };
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
@@ -111,6 +113,7 @@ function PosApp({
   const [printerMode, setPrinterModeState] = useState<PrinterMode>(DEFAULT_PRINTER_MODE);
   const [paperWidth, setPaperWidthState] = useState<PaperWidth>(DEFAULT_PAPER_WIDTH);
   const [printerAutoCut, setPrinterAutoCutState] = useState(true);
+  const [stockAlertLimit, setStockAlertLimit] = useState(DEFAULT_STOCK_ALERT_LIMIT);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -129,6 +132,11 @@ function PosApp({
       const pMode = await getAppSetting(db, SETTING_PRINTER_MODE);
       const pWidth = await getAppSetting(db, SETTING_PRINTER_PAPER_WIDTH);
       const pAutoCut = await getAppSetting(db, SETTING_PRINTER_AUTO_CUT);
+      const savedStockAlertLimit = await getAppSetting(db, SETTING_STOCK_ALERT_LIMIT);
+      const parsedStockAlertLimit = Number(savedStockAlertLimit);
+      const nextStockAlertLimit = Number.isSafeInteger(parsedStockAlertLimit) && parsedStockAlertLimit >= 0
+        ? parsedStockAlertLimit
+        : DEFAULT_STOCK_ALERT_LIMIT;
       if (cancelled) return;
       setProfile(existing);
       setShopName(name ?? DEFAULT_SHOP_NAME);
@@ -138,6 +146,7 @@ function PosApp({
       setPrinterModeState(pMode === 'mock' ? 'mock' : DEFAULT_PRINTER_MODE);
       setPaperWidthState((pWidth === '80' ? '80' : '58') as PaperWidth);
       setPrinterAutoCutState(pAutoCut !== '0');
+      setStockAlertLimit(nextStockAlertLimit);
       setRoute(existing ? { name: 'home' } : { name: 'register' });
       setBooted(true);
     })();
@@ -184,6 +193,11 @@ function PosApp({
   const setPrinterAutoCut = useCallback(async (enabled: boolean) => {
     await setAppSetting(db, SETTING_PRINTER_AUTO_CUT, enabled ? '1' : '0');
     setPrinterAutoCutState(enabled);
+  }, [db]);
+
+  const saveStockAlertLimit = useCallback(async (limit: number) => {
+    await setAppSetting(db, SETTING_STOCK_ALERT_LIMIT, String(limit));
+    setStockAlertLimit(limit);
   }, [db]);
 
   const refreshAll = useCallback(async () => {
@@ -451,6 +465,8 @@ function PosApp({
             onScan={() => setScannerOpen(true)}
             onOpenSettings={() => setRoute({ name: 'settings' })}
             onOpenPrinter={() => setRoute({ name: 'printer' })}
+            onOpenStockAlert={() => setRoute({ name: 'stockAlert' })}
+            stockAlertLimit={stockAlertLimit}
           />
         )}
         {route.name === 'sell' && (
@@ -545,6 +561,14 @@ function PosApp({
                   if (cat) deleteCategoryHandler(cat);
                 }
               : undefined}
+          />
+        )}
+        {route.name === 'stockAlert' && (
+          <StockAlertScreen
+            items={items}
+            stockAlertLimit={stockAlertLimit}
+            onSaveLimit={saveStockAlertLimit}
+            onBack={() => setRoute({ name: 'home' })}
           />
         )}
         {route.name === 'settings' && (

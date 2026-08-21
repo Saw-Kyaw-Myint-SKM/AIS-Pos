@@ -486,6 +486,8 @@ export const SHOP_UNLOCK_CODE = '123456';
 
 export const SETTING_SHOP_NAME = 'shop_name';
 export const SETTING_SHOP_NAME_UNLOCKED = 'shop_name_unlocked';
+export const SETTING_STOCK_ALERT_LIMIT = 'stock_alert_limit';
+export const DEFAULT_STOCK_ALERT_LIMIT = 5;
 
 export const SETTING_PRINTER_TARGET = 'printer_target';
 export const SETTING_PRINTER_DEVICE_NAME = 'printer_device_name';
