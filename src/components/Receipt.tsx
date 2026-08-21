@@ -49,8 +49,20 @@ export default function Receipt({ saleId, shopName }: Props) {
         </View>
       ))}
       <View style={styles.dash} />
+      <View style={styles.summaryRow}>
+        <AppText style={styles.summaryLabel}>{t.cart.subtotal}</AppText>
+        <AppText style={styles.summaryValue}>{formatKyat(sale.total - sale.taxAmount)}</AppText>
+      </View>
+      {sale.taxAmount > 0 && (
+        <View style={styles.summaryRow}>
+          <AppText style={styles.summaryLabel}>
+            {t.cart.tax} ({(sale.taxReason || 'အခွန်')})
+          </AppText>
+          <AppText style={styles.summaryValue}>{formatKyat(sale.taxAmount)}</AppText>
+        </View>
+      )}
       <View style={styles.totalRow}>
-        <AppText bold style={styles.totalLabel}>{t.receipt.total}</AppText>
+        <AppText bold style={styles.totalLabel}>{t.receipt.grandTotal}</AppText>
         <AppText bold style={styles.totalValue}>{formatKyat(sale.total)}</AppText>
       </View>
       <View style={styles.dash} />
@@ -79,6 +91,14 @@ const styles = StyleSheet.create({
   lineAmount: { fontSize: 14, color: colors.header },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   totalLabel: { fontSize: 15, color: colors.text },
-  totalValue: { fontSize: 20, color: colors.success },
+  totalValue: { fontSize: 22, color: colors.success },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  summaryLabel: { fontSize: 14, color: colors.muted },
+  summaryValue: { fontSize: 14, color: colors.text },
   thanks: { textAlign: 'center', color: colors.muted, fontSize: 13 },
 });

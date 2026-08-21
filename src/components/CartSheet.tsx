@@ -2,15 +2,18 @@ import { Image } from 'expo-image';
 import React, { useEffect, useState } from 'react';
 import {
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ClothingItem } from '../db';
 import { formatKyat, t, toMM } from '../i18n';
-import { avatarPalette, colors, radius, tileShadow } from '../theme';
+import { avatarPalette, colors, radius, shadow, tileShadow } from '../theme';
 import AppText from './AppText';
 import QtyStepper from './QtyStepper';
 import { BackArrowIcon, CartIcon, TrashIcon } from './ServiceIcon';
@@ -20,7 +23,10 @@ export type CartLine = { item: ClothingItem; quantity: number };
 type Props = {
   visible: boolean;
   lines: CartLine[];
+  subtotal: number;
+  taxAmount: number;
   total: number;
+  onSetTax: (n: number) => void;
   onClose: () => void;
   onQuantity: (id: number, delta: number) => void;
   onClear: () => void;
@@ -30,7 +36,10 @@ type Props = {
 export default function CartSheet({
   visible,
   lines,
+  subtotal,
+  taxAmount,
   total,
+  onSetTax,
   onClose,
   onQuantity,
   onClear,
@@ -39,9 +48,13 @@ export default function CartSheet({
   const count = lines.reduce((sum, line) => sum + line.quantity, 0);
   const isEmpty = lines.length === 0;
   const [confirm, setConfirm] = useState<'clear' | 'checkout' | null>(null);
+  const [taxModalOpen, setTaxModalOpen] = useState(false);
 
   useEffect(() => {
-    if (!visible) setConfirm(null);
+    if (!visible) {
+      setConfirm(null);
+      setTaxModalOpen(false);
+    }
   }, [visible]);
 
   const handleConfirmAction = () => {
@@ -144,7 +157,47 @@ export default function CartSheet({
             </Pressable>
 
             <View style={styles.totalRow}>
-              <AppText style={styles.totalLabel}>{t.cart.total}</AppText>
+              <AppText style={styles.totalLabel}>{t.cart.subtotal}</AppText>
+              <AppText style={styles.totalValue}>{formatKyat(subtotal)}</AppText>
+            </View>
+
+            {taxAmount > 0 ? (
+              <View style={styles.taxRow}>
+                <AppText style={styles.totalLabel}>{t.cart.tax}</AppText>
+                <View style={styles.taxRight}>
+                  <AppText bold style={styles.totalValue}>{formatKyat(taxAmount)}</AppText>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t.cart.editTax}
+                    onPress={() => setTaxModalOpen(true)}
+                    style={({ pressed }) => [styles.taxEditBtn, pressed && { opacity: 0.7 }]}
+                  >
+                    <AppText style={styles.taxEditText}>{t.cart.editTax}</AppText>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t.cart.clearTax}
+                    onPress={() => onSetTax(0)}
+                    style={({ pressed }) => [styles.taxClearBtn, pressed && { opacity: 0.7 }]}
+                  >
+                    <AppText bold style={styles.taxClearText}>✕</AppText>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setTaxModalOpen(true)}
+                style={({ pressed }) => [styles.addTaxBtn, pressed && { opacity: 0.6 }]}
+              >
+                <AppText bold style={styles.addTaxText}>{t.cart.addTax}</AppText>
+              </Pressable>
+            )}
+
+            <View style={styles.totalDivider} />
+
+            <View style={styles.totalRow}>
+              <AppText bold style={styles.totalLabel}>{t.cart.grandTotal}</AppText>
               <AppText bold style={styles.totalValue}>{formatKyat(total)}</AppText>
             </View>
 
@@ -213,7 +266,101 @@ export default function CartSheet({
         </View>
       </View>
     </Modal>
+
+    <TaxModal
+      visible={taxModalOpen}
+      initialAmount={taxAmount}
+      onClose={() => setTaxModalOpen(false)}
+      onSave={(n) => {
+        onSetTax(n);
+        setTaxModalOpen(false);
+      }}
+    />
     </>
+  );
+}
+
+type TaxModalProps = {
+  visible: boolean;
+  initialAmount: number;
+  onClose: () => void;
+  onSave: (n: number) => void;
+};
+
+function TaxModal({ visible, initialAmount, onClose, onSave }: TaxModalProps) {
+  const [taxInput, setTaxInput] = useState('');
+  const [taxError, setTaxError] = useState('');
+
+  useEffect(() => {
+    if (visible) {
+      setTaxInput(initialAmount > 0 ? String(initialAmount) : '');
+      setTaxError('');
+    }
+  }, [visible, initialAmount]);
+
+  const handleSave = () => {
+    const cleaned = taxInput.replace(/[^\d.]/g, '');
+    const n = Number(cleaned);
+    if (!Number.isFinite(n) || n < 0) {
+      setTaxError(t.cart.taxAmountInvalid);
+      return;
+    }
+    onSave(n);
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.taxOverlay}
+      >
+        <Pressable style={styles.taxBackdrop} onPress={onClose} />
+        <View style={styles.taxBox}>
+          <AppText bold style={styles.taxTitle}>{t.cart.taxModalTitle}</AppText>
+
+          {/* <AppText style={styles.taxFieldLabel}>{t.cart.tax}</AppText>
+          <View style={styles.taxFixedValue}>
+            <AppText bold style={styles.taxFixedText}>အခွန်</AppText>
+          </View> */}
+
+          <AppText style={styles.taxFieldLabel}>{t.cart.taxAmountLabel}</AppText>
+          <View style={[styles.taxInputWrap, taxError ? styles.taxInputWrapError : null]}>
+            <TextInput
+              style={styles.taxInput}
+              value={taxInput}
+              onChangeText={(v) => {
+                setTaxInput(v);
+                if (taxError) setTaxError('');
+              }}
+              keyboardType="numeric"
+              placeholder={t.cart.taxAmountPlaceholder}
+              placeholderTextColor={colors.muted}
+              autoFocus
+            />
+          </View>
+          {taxError ? (
+            <AppText style={styles.taxErrorText}>{taxError}</AppText>
+          ) : null}
+
+          <View style={styles.taxActions}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onClose}
+              style={({ pressed }) => [styles.taxCancelBtn, pressed && { opacity: 0.7 }]}
+            >
+              <AppText style={styles.taxCancelText}>{t.cart.cancel}</AppText>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={handleSave}
+              style={({ pressed }) => [styles.taxSaveBtn, pressed && { opacity: 0.9 }]}
+            >
+              <AppText bold style={styles.taxSaveText}>{t.cart.save}</AppText>
+            </Pressable>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -283,9 +430,9 @@ const styles = StyleSheet.create({
   emptyTitle: { color: colors.text, fontSize: 16 },
   emptyHint: { color: colors.muted, fontSize: 13, textAlign: 'center' },
   footer: {
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 10,
     backgroundColor: colors.sheet,
     borderTopWidth: 1,
     borderTopColor: '#EAEAEA',
@@ -294,30 +441,143 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-end',
-    gap: 6,
-    paddingVertical: 4,
-    marginBottom: 10,
+    gap: 4,
+    paddingVertical: 2,
+    marginBottom: 4,
   },
-  clearText: { color: colors.danger, fontSize: 13 },
+  clearText: { color: colors.danger, fontSize: 12 },
   totalRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: 14,
+    paddingBottom: 2,
   },
-  totalLabel: { color: colors.muted, fontSize: 15 },
-  totalValue: { color: colors.sellBlue, fontSize: 22 },
+  totalLabel: { color: colors.muted, fontSize: 13 },
+  totalValue: { color: colors.sellBlue, fontSize: 15 },
+  totalDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 4,
+  },
+  taxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 2,
+  },
+  taxRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  taxEditBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: colors.accentSoft,
+  },
+  taxEditText: { color: colors.header, fontSize: 11 },
+  taxClearBtn: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.dangerSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  taxClearText: { color: colors.danger, fontSize: 11, lineHeight: 13 },
+  addTaxBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 2,
+    marginBottom: 2,
+  },
+  addTaxText: { color: colors.header, fontSize: 13 },
+  taxOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  taxBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  taxBox: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: 14,
+    ...shadow,
+  },
+  taxTitle: { fontSize: 15, color: colors.header, marginBottom: 8 },
+  taxFieldLabel: {
+    color: colors.muted,
+    fontSize: 11,
+    marginBottom: 3,
+    marginTop: 4,
+  },
+  taxFixedValue: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceAlt,
+    alignSelf: 'flex-start',
+  },
+  taxFixedText: { color: colors.text, fontSize: 13 },
+  taxInputWrap: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minHeight: 44,
+  },
+  taxInputWrapError: { borderColor: colors.danger },
+  taxInput: {
+    fontSize: 14,
+    color: colors.text,
+    padding: 0,
+    minHeight: 24,
+  },
+  taxErrorText: {
+    color: colors.danger,
+    fontSize: 10,
+    marginTop: 3,
+  },
+  taxActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 10,
+  },
+  taxCancelBtn: {
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  taxCancelText: { color: colors.text, fontSize: 12 },
+  taxSaveBtn: {
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    borderRadius: radius.sm,
+    backgroundColor: colors.header,
+  },
+  taxSaveText: { color: '#FFFFFF', fontSize: 12 },
   confirmBtn: {
     backgroundColor: colors.sellBlue,
     borderRadius: radius.md,
-    paddingVertical: 16,
+    paddingVertical: 15,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    marginTop: 6,
   },
   confirmCheck: { color: '#FFFFFF', fontSize: 18 },
-  confirmText: { color: '#FFFFFF', fontSize: 17 },
+  confirmText: { color: '#FFFFFF', fontSize: 16 },
   confirmOverlay: {
     flex: 1,
     justifyContent: 'center',

@@ -50,6 +50,8 @@ export type Sale = {
   total: number;
   createdAt: string;
   itemCount: number;
+  taxAmount: number;
+  taxReason: string;
 };
 
 export type SaleItem = {
@@ -142,6 +144,8 @@ export async function initializeDatabase(db: SQLiteDatabase) {
     CREATE TABLE IF NOT EXISTS sales (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       total REAL NOT NULL,
+      tax_amount REAL NOT NULL DEFAULT 0,
+      tax_reason TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS sale_items (
@@ -181,6 +185,15 @@ export async function initializeDatabase(db: SQLiteDatabase) {
   }
   if (!colNames.has('category_id')) {
     await db.execAsync('ALTER TABLE clothes ADD COLUMN category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL');
+  }
+
+  const salesCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(sales)');
+  const salesColNames = new Set(salesCols.map((c) => c.name));
+  if (!salesColNames.has('tax_amount')) {
+    await db.execAsync('ALTER TABLE sales ADD COLUMN tax_amount REAL NOT NULL DEFAULT 0');
+  }
+  if (!salesColNames.has('tax_reason')) {
+    await db.execAsync("ALTER TABLE sales ADD COLUMN tax_reason TEXT NOT NULL DEFAULT ''");
   }
 
   // Track first-run seeding with PRAGMA user_version so that a re-import of a
@@ -420,11 +433,17 @@ export async function createSale(
   db: SQLiteDatabase,
   items: ClothingItem[],
   quantities: Record<number, number>,
+  taxAmount: number = 0,
+  taxReason: string = '',
 ): Promise<number> {
-  const total = items.reduce((sum, item) => sum + item.price * (quantities[item.id] ?? 0), 0);
+  const subtotal = items.reduce((sum, item) => sum + item.price * (quantities[item.id] ?? 0), 0);
+  const total = subtotal + taxAmount;
   let saleId = 0;
   await db.withTransactionAsync(async () => {
-    const result = await db.runAsync('INSERT INTO sales (total) VALUES (?)', total);
+    const result = await db.runAsync(
+      'INSERT INTO sales (total, tax_amount, tax_reason) VALUES (?, ?, ?)',
+      total, taxAmount, taxReason,
+    );
     saleId = result.lastInsertRowId;
     for (const item of items) {
       const quantity = quantities[item.id] ?? 0;
@@ -441,7 +460,9 @@ export async function createSale(
 
 export async function getSales(db: SQLiteDatabase) {
   return db.getAllAsync<Sale>(
-    `SELECT sales.id, sales.total, sales.created_at AS createdAt,
+    `SELECT sales.id, sales.total, sales.tax_amount AS taxAmount,
+            sales.tax_reason AS taxReason,
+            sales.created_at AS createdAt,
       COALESCE(SUM(sale_items.quantity), 0) AS itemCount
      FROM sales LEFT JOIN sale_items ON sale_items.sale_id = sales.id
      GROUP BY sales.id ORDER BY sales.created_at DESC`,
@@ -450,7 +471,9 @@ export async function getSales(db: SQLiteDatabase) {
 
 export async function getSale(db: SQLiteDatabase, id: number) {
   return db.getFirstAsync<Sale>(
-    `SELECT sales.id, sales.total, sales.created_at AS createdAt,
+    `SELECT sales.id, sales.total, sales.tax_amount AS taxAmount,
+            sales.tax_reason AS taxReason,
+            sales.created_at AS createdAt,
       COALESCE(SUM(sale_items.quantity), 0) AS itemCount
      FROM sales LEFT JOIN sale_items ON sale_items.sale_id = sales.id
      WHERE sales.id = ? GROUP BY sales.id`, id,

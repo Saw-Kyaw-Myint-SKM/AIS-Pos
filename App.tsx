@@ -99,6 +99,7 @@ function PosApp({
   const [sales, setSales] = useState<Sale[]>([]);
   const [today, setToday] = useState<TodaySummary>({ total: 0, saleCount: 0, itemCount: 0 });
   const [cart, setCart] = useState<Record<number, number>>({});
+  const [taxAmount, setTaxAmount] = useState(0);
   const [cartOpen, setCartOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [lastScannedItem, setLastScannedItem] = useState<ClothingItem | null>(null);
@@ -186,7 +187,8 @@ function PosApp({
     .filter((item) => cart[item.id])
     .map((item) => ({ item, quantity: cart[item.id] }));
   const cartCount = cartLines.reduce((sum, line) => sum + line.quantity, 0);
-  const cartTotal = cartLines.reduce((sum, line) => sum + line.item.price * line.quantity, 0);
+  const cartSubtotal = cartLines.reduce((sum, line) => sum + line.item.price * line.quantity, 0);
+  const cartTotal = cartSubtotal + taxAmount;
 
   const changeQuantity = useCallback((id: number, delta: number) => {
     setCart((current) => {
@@ -229,16 +231,24 @@ function PosApp({
 
   const confirmSale = useCallback(async () => {
     if (!cartLines.length) return;
-    const saleId = await createSale(db, cartLines.map((l) => l.item), cart);
+    const saleId = await createSale(
+      db,
+      cartLines.map((l) => l.item),
+      cart,
+      taxAmount,
+      'အခွန်',
+    );
     setCart({});
+    setTaxAmount(0);
     setCartOpen(false);
     setLastScannedItem(null);
     await refreshAll();
     setRoute({ name: 'receipt', saleId });
-  }, [db, cartLines, cart, refreshAll]);
+  }, [db, cartLines, cart, taxAmount, refreshAll]);
 
   const clearCart = useCallback(() => {
     setCart({});
+    setTaxAmount(0);
     setLastScannedItem(null);
     showToast(t.toast.cleared);
   }, [showToast]);
@@ -472,7 +482,6 @@ function PosApp({
           <View style={{ flex: 1, paddingBottom: 90 }}>
             <HistoryScreen
               sales={sales}
-              todayTotal={today.total}
               onOpen={(saleId) => setRoute({ name: 'saleDetail', saleId })}
             />
           </View>
@@ -571,7 +580,10 @@ function PosApp({
       <CartSheet
         visible={cartOpen}
         lines={cartLines}
+        subtotal={cartSubtotal}
+        taxAmount={taxAmount}
         total={cartTotal}
+        onSetTax={setTaxAmount}
         onClose={() => setCartOpen(false)}
         onQuantity={changeQuantity}
         onClear={clearCart}

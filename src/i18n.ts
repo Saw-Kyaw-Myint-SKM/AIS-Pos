@@ -153,6 +153,17 @@ export const t = {
     confirmCheckoutBody: 'ဤ အရောင်းကို သိမ်းဆည်းမည်ဖြစ်သည်',
     cancel: 'မလုပ်တော့ပါ',
     yesClear: 'ရှင်းမည်',
+    subtotal: 'ကုန်ပစ္စည်း စုစုပေါင်း',
+    grandTotal: 'စုစုပေါင်း ပေးချေရန်',
+    tax: 'အခွန်',
+    addTax: '+ အခွန်ထည့်ရန်',
+    editTax: 'ပြင်ရန်',
+    clearTax: 'ဖြုတ်ရန်',
+    taxModalTitle: 'အခွန်ထည့်ရန်',
+    taxAmountLabel: 'ပမာဏ (ကျပ်)',
+    taxAmountPlaceholder: 'ဥပမာ - ၅၀၀ ကျပ်',
+    taxAmountInvalid: '၀ နှင့းအထက်ရှိသော ကိန်းဂဏန်းကို ထည့်ပါ',
+    save: 'သိမ်းရန်',
   },
   items: {
     title: 'ပစ္စည်းစာရင်း',
@@ -228,11 +239,30 @@ export const t = {
     todayTotal: 'ယနေ့ ရောင်းငွေစုစုပေါင်း',
     bill: 'ဘေလ်',
     empty: 'မှတ်တမ်း မရှိသေးပါ',
+    startDate: 'စတင်ရက်',
+    endDate: 'ကုန်ဆုံးရက်',
+    clearFilter: 'ရှင်းရန်',
+    billCount: 'ဘေလ် အရေအတွက်',
+    totalAmount: 'စုစုပေါင်းငွေ',
+    emptyFiltered: 'ဤရက်အပိုင်းအခြားတွင် အရောင်း မရှိပါ',
+    datePicker: {
+      startTitle: 'စတင်ရက် ရွေးရန်',
+      endTitle: 'ကုန်ဆုံးရက် ရွေးရန်',
+      day: 'ရက်',
+      month: 'လ',
+      year: 'နှစ်',
+      today: 'ယနေ့',
+      clear: 'ရှင်းရန်',
+      cancel: 'ပယ်ဖျက်မည်',
+      done: 'ရွေးမည်',
+      invalidRange: 'ကုန်ဆုံးရက်သည် စတင်ရက်ထက် ကြီးရမည်',
+    },
   },
   receipt: {
     title: 'အရောင်းဘေလ်',
     billNo: 'ဘေလ်နံပါတ်',
     total: 'စုစုပေါင်း',
+    grandTotal: 'စုစုပေါင်း ပေးချေရန်',
     thanks: 'ဝယ်ယူအားပေးမှုအတွက် ကျေးဇူးတင်ပါသည်',
     newSale: 'အရောင်းအသစ်စတင်ရန်',
     viewHistory: 'မှတ်တမ်းကြည့်ရန်',
@@ -304,6 +334,18 @@ const MONTHS_MM = [
 
 export const parseDbDate = (createdAt: string): Date =>
   new Date(createdAt.replace(' ', 'T') + 'Z');
+
+export const startOfDay = (d: Date): Date => {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+};
+
+export const endOfDay = (d: Date): Date => {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+};
 
 export const formatDateMM = (d: Date): string =>
   `${toMM(d.getDate())} ${MONTHS_MM[d.getMonth()]} ${toMM(d.getFullYear())}`;
