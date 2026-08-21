@@ -17,10 +17,8 @@
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",
     "react-native": "^0.81.5",
-    "react-native-esc-pos-printer": "^4.5.0",
     "react-native-safe-area-context": "~5.6.0",
-    "react-native-svg": "15.12.1",
-    "react-native-view-shot": "4.0.3"
+    "react-native-svg": "15.12.1"
   },
   "devDependencies": {
     "@testing-library/react-native": "^13.0.0",

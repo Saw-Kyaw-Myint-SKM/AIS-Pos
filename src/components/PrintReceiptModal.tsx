@@ -1,5 +1,5 @@
 import { useSQLiteContext } from 'expo-sqlite';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -8,22 +8,16 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { captureRef } from 'react-native-view-shot';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   getSale,
   getSaleItems,
   type PaperWidth,
-  type PrinterMode,
   type Sale,
   type SaleItem,
 } from '../db';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { t } from '../i18n';
-import {
-  printImageToThermal,
-  ThermalPrintError,
-  type ThermalPrintErrorCode,
-} from '../thermalPrint';
+import { simulateReceiptPrint } from '../thermalPrint';
 import { colors, radius } from '../theme';
 import AppText from './AppText';
 import PrintableReceipt from './PrintableReceipt';
@@ -34,20 +28,8 @@ type Props = {
   saleId: number;
   shopName: string;
   paperWidth: PaperWidth;
-  printerMode: PrinterMode;
-  printerTarget: string;
-  printerDeviceName: string;
-  autoCut: boolean;
   onClose: () => void;
   onPrinted: () => void;
-  onError: (code: ThermalPrintErrorCode) => void;
-};
-
-const errorMessage = (code: ThermalPrintErrorCode): string => {
-  if (code === 'connect_timeout') return t.printer.connectTimeout;
-  if (code === 'offline') return t.printer.offline;
-  if (code === 'send_unknown') return t.printer.sendUnknown;
-  return t.printer.error;
 };
 
 export default function PrintReceiptModal({
@@ -55,27 +37,19 @@ export default function PrintReceiptModal({
   saleId,
   shopName,
   paperWidth,
-  printerMode,
-  printerTarget,
-  printerDeviceName,
-  autoCut,
   onClose,
   onPrinted,
-  onError,
 }: Props) {
   const db = useSQLiteContext();
-  const printRef = useRef<View>(null);
   const [sale, setSale] = useState<Sale | null>(null);
   const [items, setItems] = useState<SaleItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [printing, setPrinting] = useState(false);
-  const [printError, setPrintError] = useState<ThermalPrintErrorCode | null>(null);
 
   useEffect(() => {
     if (!visible) return;
     let alive = true;
     setLoading(true);
-    setPrintError(null);
     (async () => {
       const [saleRow, itemRows] = await Promise.all([getSale(db, saleId), getSaleItems(db, saleId)]);
       if (!alive) return;
@@ -91,26 +65,10 @@ export default function PrintReceiptModal({
   const handlePrint = async () => {
     if (!sale || printing) return;
     setPrinting(true);
-    setPrintError(null);
     try {
-      const uri = await captureRef(printRef, {
-        format: 'png',
-        quality: 1,
-        result: 'tmpfile',
-      });
-      await printImageToThermal(uri, {
-        target: printerTarget,
-        deviceName: printerDeviceName,
-        paperWidth,
-        mode: printerMode,
-        autoCut,
-      });
+      await simulateReceiptPrint(paperWidth);
       onPrinted();
       onClose();
-    } catch (error) {
-      const code = error instanceof ThermalPrintError ? error.code : 'unknown';
-      setPrintError(code);
-      onError(code);
     } finally {
       setPrinting(false);
     }
@@ -148,7 +106,6 @@ export default function PrintReceiptModal({
           <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
             <View style={styles.preview}>
               <PrintableReceipt
-                ref={printRef}
                 sale={sale}
                 items={items}
                 shopName={shopName}
@@ -160,11 +117,6 @@ export default function PrintReceiptModal({
 
         {!loading && sale && (
           <View style={styles.footer}>
-            {printError ? (
-              <View style={styles.errorBox}>
-                <AppText style={styles.errorText}>{errorMessage(printError)}</AppText>
-              </View>
-            ) : null}
             <Pressable
               accessibilityRole="button"
               onPress={handlePrint}
@@ -176,9 +128,7 @@ export default function PrintReceiptModal({
               ) : (
                 <PrinterIcon size={18} color="#FFFFFF" />
               )}
-              <AppText style={styles.printText}>
-                {printError ? t.printer.retry : t.printer.printConfirm}
-              </AppText>
+              <AppText style={styles.printText}>{t.printer.printConfirm}</AppText>
             </Pressable>
           </View>
         )}
