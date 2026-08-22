@@ -1,21 +1,15 @@
 {
   "expo": {
-    "name": "clothes-pos",
+    "name": "AIS POS",
     "slug": "clothes-pos",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/source-mm-logo.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true
     },
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
-      },
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.INTERNET",
@@ -24,21 +18,21 @@
       "package": "com.anonymous.clothespos"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/source-mm-logo.png"
     },
     "plugins": [
       "expo-sqlite",
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Clothes POS to scan clothing QR codes."
+          "cameraPermission": "Allow AIS POS to scan clothing QR codes."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Clothes POS to choose photos for clothing items.",
-          "cameraPermission": "Allow Clothes POS to take photos of clothing items.",
+          "photosPermission": "Allow AIS POS to choose photos for clothing items.",
+          "cameraPermission": "Allow AIS POS to take photos of clothing items.",
           "microphonePermission": false
         }
       ],
