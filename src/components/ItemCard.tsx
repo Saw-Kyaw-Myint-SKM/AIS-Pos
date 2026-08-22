@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import type { ClothingItem } from '../db';
-import { formatKyat, toMM } from '../i18n';
+import { formatKyat, t, toMM } from '../i18n';
 import { avatarPalette, colors, font, radius, shadow } from '../theme';
 import AppText from './AppText';
 
@@ -16,21 +16,22 @@ export default function ItemCard({ item, quantity, onChangeQty }: Props) {
   const color = item.colorValue || avatarPalette[item.id % avatarPalette.length];
   const stock = item.stock ?? 0;
   const lowStock = stock > 0 && stock <= 3;
-  const outOfStock = stock <= 0;
+  const soldOut = stock <= 0 || quantity >= stock;
 
   const handleSell = () => {
-    if (outOfStock) return;
-    if (quantity >= stock) return;
+    if (soldOut) return;
     onChangeQty(item, quantity + 1);
   };
 
   return (
     <Pressable
       onPress={handleSell}
-      disabled={outOfStock}
+      disabled={soldOut}
+      accessibilityState={{ disabled: soldOut }}
       style={({ pressed }) => [
         styles.card,
-        pressed && !outOfStock && styles.cardPressed,
+        soldOut && styles.cardDisabled,
+        pressed && !soldOut && styles.cardPressed,
       ]}
     >
       <View style={styles.topRow}>
@@ -47,13 +48,13 @@ export default function ItemCard({ item, quantity, onChangeQty }: Props) {
           </View>
         )}
         <View style={styles.stockWrap}>
-          <AppText style={styles.stockLabel}>{t_stock}</AppText>
+          <AppText style={styles.stockLabel}>{t.sell.stock}</AppText>
           <AppText
             bold
             style={[
               styles.stockValue,
               lowStock && styles.stockValueLow,
-              outOfStock && styles.stockValueOut,
+              soldOut && styles.stockValueOut,
             ]}
           >
             {toMM(stock)}
@@ -73,22 +74,22 @@ export default function ItemCard({ item, quantity, onChangeQty }: Props) {
       </View>
       {quantity > 0 ? (
         <View style={styles.qtyLine}>
-          <AppText style={styles.qtyLabel}>{t_qty}</AppText>
+          <AppText style={styles.qtyLabel}>{soldOut ? t.sell.soldOut : t.sell.quantity}</AppText>
           <AppText bold style={styles.qtyValue}>× {toMM(quantity)}</AppText>
         </View>
       ) : (
         <Pressable
           accessibilityRole="button"
           onPress={handleSell}
-          disabled={outOfStock}
+          disabled={soldOut}
           style={({ pressed }) => [
             styles.sellBtn,
-            outOfStock && styles.sellBtnDisabled,
-            pressed && !outOfStock && styles.sellBtnPressed,
+            soldOut && styles.sellBtnDisabled,
+            pressed && !soldOut && styles.sellBtnPressed,
           ]}
         >
           <AppText bold style={styles.sellText}>
-            {outOfStock ? 'ကုန်သွားပါပြီ' : 'ရောင်းမည်'}
+            {soldOut ? t.sell.soldOut : t.sell.add}
           </AppText>
         </Pressable>
       )}
@@ -107,6 +108,7 @@ const styles = StyleSheet.create({
     ...shadow,
   },
   cardPressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
+  cardDisabled: { opacity: 0.68 },
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -192,5 +194,4 @@ const styles = StyleSheet.create({
   sellText: { color: '#FFFFFF', fontSize: 12, fontFamily: font.bold },
 });
 
-const t_stock = 'စတော့';
-const t_qty = 'အရေအတွက်';
+

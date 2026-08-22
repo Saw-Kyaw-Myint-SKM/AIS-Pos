@@ -209,7 +209,14 @@ export default function ItemFormScreen({ initial, categories, onBack, onSave, on
         <AppText bold style={styles.headerTitle}>
           {form.id ? t.items.editItem : t.items.newItem}
         </AppText>
-        <View style={styles.headerSpacer} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t.items.save}
+          onPress={() => onSave(form)}
+          style={({ pressed }) => [styles.headerSaveButton, pressed && styles.headerSavePressed]}
+        >
+          <AppText bold style={styles.headerSaveText}>{t.items.save}</AppText>
+        </Pressable>
       </View>
 
       <ScrollView
@@ -325,40 +332,29 @@ export default function ItemFormScreen({ initial, categories, onBack, onSave, on
           />
         </View>
 
-        <View style={styles.field}>
-          <AppText style={styles.label}>{t.items.size}</AppText>
-          <TextInput
-            value={form.size}
-            onChangeText={(v) => set('size', v)}
-            placeholder={t.items.size}
-            placeholderTextColor="#9CA3AF"
-            style={styles.input}
-          />
-        </View>
+        <View style={styles.fieldRow}>
+          <View style={styles.flexField}>
+            <AppText style={styles.label}>{t.items.size}</AppText>
+            <TextInput
+              value={form.size}
+              onChangeText={(v) => set('size', v)}
+              placeholder={t.items.size}
+              placeholderTextColor="#9CA3AF"
+              style={styles.input}
+            />
+          </View>
 
-        <View style={styles.field}>
-          <AppText style={styles.label}>{t.items.stock}</AppText>
-          <TextInput
-            value={form.stock}
-            onChangeText={(v) => set('stock', v)}
-            placeholder="0"
-            placeholderTextColor="#9CA3AF"
-            keyboardType="numeric"
-            style={styles.input}
-          />
-        </View>
-
-        <View style={styles.field}>
-          <AppText style={styles.label}>{t.items.note}</AppText>
-          <TextInput
-            value={form.note}
-            onChangeText={(v) => set('note', v)}
-            placeholder={t.items.note}
-            placeholderTextColor="#9CA3AF"
-            multiline
-            textAlignVertical="top"
-            style={styles.textArea}
-          />
+          <View style={styles.flexField}>
+            <AppText style={styles.label}>{t.items.stock}</AppText>
+            <TextInput
+              value={form.stock}
+              onChangeText={(v) => set('stock', v)}
+              placeholder="0"
+              placeholderTextColor="#9CA3AF"
+              keyboardType="numeric"
+              style={styles.input}
+            />
+          </View>
         </View>
 
         <View style={styles.field}>
@@ -477,12 +473,6 @@ export default function ItemFormScreen({ initial, categories, onBack, onSave, on
           </View>
         )}
 
-        <Pressable
-          style={styles.saveBtn}
-          onPress={() => onSave(form)}
-        >
-          <AppText bold style={styles.saveText}>{t.items.save}</AppText>
-        </Pressable>
       </ScrollView>
 
       <Modal
@@ -604,15 +594,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    minHeight: 56,
+    paddingVertical: 8,
     paddingHorizontal: 12,
   },
   backBtn: { padding: 4 },
   headerTitle: { color: '#FFFFFF', fontSize: 18 },
-  headerSpacer: { width: 30 },
+  headerSaveButton: { minWidth: 72, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.18)' },
+  headerSavePressed: { opacity: 0.75 },
+  headerSaveText: { color: '#FFFFFF', fontSize: 14, fontFamily: font.bold },
   body: { flex: 1 },
   bodyContent: { padding: 20, paddingBottom: 40 },
   field: { marginBottom: 18 },
+  fieldRow: { flexDirection: 'row', gap: 12, marginBottom: 18 },
+  flexField: { flex: 1 },
   label: {
     fontSize: 14,
     color: '#374151',
@@ -728,18 +723,6 @@ const styles = StyleSheet.create({
     fontFamily: font.bold,
     lineHeight: 16,
   },
-  textArea: {
-    backgroundColor: INPUT_BG,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: INPUT_BORDER,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontFamily: 'Pyidaungsu-Regular',
-    fontSize: 15,
-    color: '#111827',
-    minHeight: 96,
-  },
   radioGroup: {
     flexDirection: 'row',
     gap: 24,
@@ -772,14 +755,6 @@ const styles = StyleSheet.create({
     color: '#374151',
     fontFamily: font.regular,
   },
-  saveBtn: {
-    backgroundColor: BLUE,
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  saveText: { color: '#FFFFFF', fontSize: 14 },
   colorGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

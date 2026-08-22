@@ -176,8 +176,8 @@ function formatKyat(value: number): string {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F5F5F5' },
-  header: { backgroundColor: '#4A6CF7', paddingHorizontal: 16, paddingVertical: 14 },
-  title: { color: '#fff', fontSize: 20 },
+  header: { backgroundColor: '#4A6CF7', minHeight: 56, justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8 },
+  title: { color: '#fff', fontSize: 18 },
 
   rangeBar: {
     flexDirection: 'row',

@@ -137,6 +137,7 @@ export default function CartSheet({
                       value={line.quantity}
                       onMinus={() => onQuantity(line.item.id, -1)}
                       onPlus={() => onQuantity(line.item.id, 1)}
+                      plusDisabled={line.quantity >= line.item.stock}
                     />
                   </View>
                 </View>
@@ -371,8 +372,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    minHeight: 56,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   backBtn: {
     width: 36,

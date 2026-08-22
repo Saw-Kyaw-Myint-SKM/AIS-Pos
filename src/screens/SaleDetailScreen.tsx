@@ -98,10 +98,10 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#4A6CF7',
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 12, paddingVertical: 14, gap: 10,
+    minHeight: 56, paddingHorizontal: 12, paddingVertical: 8, gap: 10,
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  title: { flex: 1, color: '#fff', fontSize: 20, textAlign: 'center' },
+  title: { flex: 1, color: '#fff', fontSize: 18, textAlign: 'center' },
   pdfBtn: {
     marginHorizontal: 16,
     borderWidth: 1,

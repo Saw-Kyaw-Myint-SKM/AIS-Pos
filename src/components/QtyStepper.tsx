@@ -8,9 +8,10 @@ type Props = {
   value: number;
   onMinus: () => void;
   onPlus: () => void;
+  plusDisabled?: boolean;
 };
 
-export default function QtyStepper({ value, onMinus, onPlus }: Props) {
+export default function QtyStepper({ value, onMinus, onPlus, plusDisabled = false }: Props) {
   return (
     <View style={styles.row}>
       <Pressable
@@ -23,7 +24,9 @@ export default function QtyStepper({ value, onMinus, onPlus }: Props) {
       <AppText bold style={styles.value}>{toMM(value)}</AppText>
       <Pressable
         accessibilityRole="button"
-        style={({ pressed }) => [styles.btn, styles.plus, pressed && styles.btnPressed]}
+        accessibilityState={{ disabled: plusDisabled }}
+        disabled={plusDisabled}
+        style={({ pressed }) => [styles.btn, styles.plus, plusDisabled && styles.plusDisabled, pressed && !plusDisabled && styles.btnPressed]}
         onPress={onPlus}
       >
         <AppText bold style={styles.plusText}>＋</AppText>
@@ -43,6 +46,7 @@ const styles = StyleSheet.create({
   },
   minus: { backgroundColor: '#EEF0FF' },
   plus: { backgroundColor: colors.sellBlue },
+  plusDisabled: { backgroundColor: '#D1D5DB' },
   btnPressed: { opacity: 0.75 },
   minusText: { color: colors.header, fontSize: 18, lineHeight: 22 },
   plusText: { color: '#FFFFFF', fontSize: 18, lineHeight: 22 },

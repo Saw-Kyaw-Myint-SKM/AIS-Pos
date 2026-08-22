@@ -106,6 +106,20 @@ export async function initializeDatabase(db: SQLiteDatabase) {
   // with "unable to close due to unfinalized statements".
   await db.execAsync('PRAGMA journal_mode = WAL;');
 
+  // Rename the legacy inventory table in place before creating the canonical
+  // table. ALTER TABLE preserves existing rows, IDs, constraints, and indexes.
+  const existingInventoryTables = await db.getAllAsync<{ name: string }>(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('clothes', 'items')`,
+  );
+  const hasLegacyClothes = existingInventoryTables.some((table) => table.name === 'clothes');
+  const hasItems = existingInventoryTables.some((table) => table.name === 'items');
+  if (hasLegacyClothes && hasItems) {
+    throw new Error('Both legacy clothes and items tables exist; inventory migration cannot continue safely.');
+  }
+  if (hasLegacyClothes) {
+    await db.execAsync('ALTER TABLE clothes RENAME TO items;');
+  }
+
   // Schema in a single statement (one transaction). Keeps the connection
   // clean for closeAsync.
   await db.execAsync(`
@@ -126,7 +140,7 @@ export async function initializeDatabase(db: SQLiteDatabase) {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
-    CREATE TABLE IF NOT EXISTS clothes (
+    CREATE TABLE IF NOT EXISTS items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       qr_code TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
@@ -163,28 +177,28 @@ export async function initializeDatabase(db: SQLiteDatabase) {
     );
   `);
 
-  const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(clothes)');
+  const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(items)');
   const colNames = new Set(cols.map((c) => c.name));
   if (!colNames.has('category')) {
-    await db.execAsync("ALTER TABLE clothes ADD COLUMN category TEXT NOT NULL DEFAULT ''");
+    await db.execAsync("ALTER TABLE items ADD COLUMN category TEXT NOT NULL DEFAULT ''");
   }
   if (!colNames.has('stock')) {
-    await db.execAsync('ALTER TABLE clothes ADD COLUMN stock INTEGER NOT NULL DEFAULT 0');
+    await db.execAsync('ALTER TABLE items ADD COLUMN stock INTEGER NOT NULL DEFAULT 0');
   }
   if (!colNames.has('choice_type')) {
-    await db.execAsync("ALTER TABLE clothes ADD COLUMN choice_type TEXT NOT NULL DEFAULT 'color'");
+    await db.execAsync("ALTER TABLE items ADD COLUMN choice_type TEXT NOT NULL DEFAULT 'color'");
   }
   if (!colNames.has('color_value')) {
-    await db.execAsync("ALTER TABLE clothes ADD COLUMN color_value TEXT NOT NULL DEFAULT ''");
+    await db.execAsync("ALTER TABLE items ADD COLUMN color_value TEXT NOT NULL DEFAULT ''");
   }
   if (!colNames.has('note')) {
-    await db.execAsync("ALTER TABLE clothes ADD COLUMN note TEXT NOT NULL DEFAULT ''");
+    await db.execAsync("ALTER TABLE items ADD COLUMN note TEXT NOT NULL DEFAULT ''");
   }
   if (!colNames.has('photo_uri')) {
-    await db.execAsync("ALTER TABLE clothes ADD COLUMN photo_uri TEXT NOT NULL DEFAULT ''");
+    await db.execAsync("ALTER TABLE items ADD COLUMN photo_uri TEXT NOT NULL DEFAULT ''");
   }
   if (!colNames.has('category_id')) {
-    await db.execAsync('ALTER TABLE clothes ADD COLUMN category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL');
+    await db.execAsync('ALTER TABLE items ADD COLUMN category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL');
   }
 
   const salesCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(sales)');
@@ -217,13 +231,13 @@ export async function initializeDatabase(db: SQLiteDatabase) {
     }
   }
 
-  // One-shot migration: copy clothes.category text -> category_id via find-or-create.
+  // One-shot migration: copy items.category text -> category_id via find-or-create.
   const needsMigration = await db.getFirstAsync<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM clothes WHERE category_id IS NULL AND category <> ''`,
+    `SELECT COUNT(*) AS n FROM items WHERE category_id IS NULL AND category <> ''`,
   );
   if (needsMigration && needsMigration.n > 0) {
     const rows = await db.getAllAsync<{ category: string }>(
-      `SELECT DISTINCT category FROM clothes WHERE category_id IS NULL AND category <> ''`,
+      `SELECT DISTINCT category FROM items WHERE category_id IS NULL AND category <> ''`,
     );
     await db.withTransactionAsync(async () => {
       for (const row of rows) {
@@ -247,16 +261,16 @@ export async function initializeDatabase(db: SQLiteDatabase) {
           id = { id: result.lastInsertRowId };
         }
         await db.runAsync(
-          `UPDATE clothes SET category_id = ? WHERE category = ? COLLATE NOCASE AND category_id IS NULL`,
+          `UPDATE items SET category_id = ? WHERE category = ? COLLATE NOCASE AND category_id IS NULL`,
           id!.id, name,
         );
       }
     });
   }
 
-  // Seed sample clothes only on a truly fresh database.
+  // Seed sample items only on a truly fresh database.
   if (isFresh) {
-    const count = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM clothes');
+    const count = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM items');
     if (!count?.count) {
       const seedCats = await db.getAllAsync<{ id: number; name: string }>(
         `SELECT id, name FROM categories ORDER BY position`,
@@ -266,7 +280,7 @@ export async function initializeDatabase(db: SQLiteDatabase) {
         return found ? found.id : null;
       };
       await db.runAsync(
-        `INSERT INTO clothes (qr_code, name, size, price, category_id) VALUES
+        `INSERT INTO items (qr_code, name, size, price, category_id) VALUES
          (?, ?, ?, ?, ?), (?, ?, ?, ?, ?), (?, ?, ?, ?, ?), (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)`,
         'SHIRT-WHITE-M', 'အင်္ကျီအဖြူ', 'M', 8500, seedCategory('အင်္ကျီ'),
         'JEANS-BLUE-32', 'ဂျင်းဘောင်းဘီအပြာ', '32', 25000, seedCategory('ဘောင်းဘီ'),
@@ -322,7 +336,7 @@ export async function getClothingItems(db: SQLiteDatabase) {
        COALESCE(cat.color, '') AS categoryColor,
        c.stock, c.choice_type AS choiceType, c.color_value AS colorValue,
        c.photo_uri AS photoUri, c.note
-     FROM clothes c
+     FROM items c
      LEFT JOIN categories cat ON cat.id = c.category_id
      ORDER BY c.name COLLATE NOCASE`,
   );
@@ -337,7 +351,7 @@ export async function findClothingByQr(db: SQLiteDatabase, qrCode: string) {
        COALESCE(cat.color, '') AS categoryColor,
        c.stock, c.choice_type AS choiceType, c.color_value AS colorValue,
        c.photo_uri AS photoUri, c.note
-     FROM clothes c
+     FROM items c
      LEFT JOIN categories cat ON cat.id = c.category_id
      WHERE c.qr_code = ?`, qrCode,
   );
@@ -349,19 +363,19 @@ export async function saveClothingItem(
 ) {
   if (item.id) {
     await db.runAsync(
-      `UPDATE clothes SET qr_code = ?, name = ?, size = ?, price = ?, category_id = ?, stock = ?, choice_type = ?, color_value = ?, photo_uri = ?, note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      `UPDATE items SET qr_code = ?, name = ?, size = ?, price = ?, category_id = ?, stock = ?, choice_type = ?, color_value = ?, photo_uri = ?, note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
       item.qrCode, item.name, item.size, item.price, item.categoryId, item.stock, item.choiceType, item.colorValue, item.photoUri, item.note, item.id,
     );
   } else {
     await db.runAsync(
-      `INSERT INTO clothes (qr_code, name, size, price, category_id, stock, choice_type, color_value, photo_uri, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO items (qr_code, name, size, price, category_id, stock, choice_type, color_value, photo_uri, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       item.qrCode, item.name, item.size, item.price, item.categoryId, item.stock, item.choiceType, item.colorValue, item.photoUri, item.note,
     );
   }
 }
 
 export async function deleteClothingItem(db: SQLiteDatabase, id: number) {
-  await db.runAsync('DELETE FROM clothes WHERE id = ?', id);
+  await db.runAsync('DELETE FROM items WHERE id = ?', id);
 }
 
 export async function getCategories(db: SQLiteDatabase) {
@@ -420,14 +434,16 @@ export async function reorderCategories(db: SQLiteDatabase, ids: number[]) {
 
 export async function getCategoryItemCounts(db: SQLiteDatabase): Promise<Record<number, number>> {
   const rows = await db.getAllAsync<{ id: number; count: number }>(
-    `SELECT categories.id AS id, COUNT(clothes.id) AS count
-     FROM categories LEFT JOIN clothes ON clothes.category_id = categories.id
+    `SELECT categories.id AS id, COUNT(items.id) AS count
+     FROM categories LEFT JOIN items ON items.category_id = categories.id
      GROUP BY categories.id`,
   );
   const out: Record<number, number> = {};
   for (const row of rows) out[row.id] = row.count;
   return out;
 }
+
+export const INSUFFICIENT_STOCK_ERROR = 'INSUFFICIENT_STOCK';
 
 export async function createSale(
   db: SQLiteDatabase,
@@ -447,12 +463,22 @@ export async function createSale(
     saleId = result.lastInsertRowId;
     for (const item of items) {
       const quantity = quantities[item.id] ?? 0;
-      if (quantity > 0) {
-        await db.runAsync(
-          'INSERT INTO sale_items (sale_id, clothing_id, name, size, price, quantity) VALUES (?, ?, ?, ?, ?, ?)',
-          saleId, item.id, item.name, item.size, item.price, quantity,
-        );
+      if (quantity <= 0) continue;
+
+      const stockUpdate = await db.runAsync(
+        `UPDATE items
+         SET stock = stock - ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND stock >= ?`,
+        quantity, item.id, quantity,
+      );
+      if (stockUpdate.changes !== 1) {
+        throw new Error(INSUFFICIENT_STOCK_ERROR);
       }
+
+      await db.runAsync(
+        'INSERT INTO sale_items (sale_id, clothing_id, name, size, price, quantity) VALUES (?, ?, ?, ?, ?, ?)',
+        saleId, item.id, item.name, item.size, item.price, quantity,
+      );
     }
   });
   return saleId;

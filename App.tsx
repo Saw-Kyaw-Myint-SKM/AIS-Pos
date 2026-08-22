@@ -10,6 +10,7 @@ import AppText from './src/components/AppText';
 import CartSheet, { type CartLine } from './src/components/CartSheet';
 import {
   createSale, deleteCategory, deleteClothingItem, DEFAULT_PAPER_WIDTH, DEFAULT_SHOP_NAME, exportDatabaseFile, exportDatabaseToDownloads,
+  INSUFFICIENT_STOCK_ERROR,
   findClothingByQr,
   getAppSetting, getCategories, getClothingItems, getCustomerProfile, getSales, getTodaySummary,
   importDatabaseFile, initializeDatabase,
@@ -192,7 +193,9 @@ function PosApp({
 
   const changeQuantity = useCallback((id: number, delta: number) => {
     setCart((current) => {
-      const quantity = (current[id] ?? 0) + delta;
+      const item = items.find((candidate) => candidate.id === id);
+      const maximum = item?.stock ?? 0;
+      const quantity = Math.min((current[id] ?? 0) + delta, maximum);
       if (quantity <= 0) {
         const next = { ...current };
         delete next[id];
@@ -200,19 +203,20 @@ function PosApp({
       }
       return { ...current, [id]: quantity };
     });
-  }, []);
+  }, [items]);
 
   const setItemQty = useCallback((item: ClothingItem, qty: number) => {
     setCart((c) => {
+      const nextQuantity = Math.min(qty, item.stock);
       const current = c[item.id] ?? 0;
-      if (qty === current) return c;
-      if (qty <= 0) {
+      if (nextQuantity === current) return c;
+      if (nextQuantity <= 0) {
         if (!(item.id in c)) return c;
         const next = { ...c };
         delete next[item.id];
         return next;
       }
-      return { ...c, [item.id]: qty };
+      return { ...c, [item.id]: nextQuantity };
     });
   }, []);
 
@@ -223,28 +227,39 @@ function PosApp({
       Alert.alert(t.scanner.notFoundTitle, `${value}\n${t.scanner.notFoundBody}`);
       return;
     }
+    const cartQuantity = cart[item.id] ?? 0;
+    if (cartQuantity >= item.stock) {
+      showToast(t.sell.soldOut);
+      return;
+    }
     changeQuantity(item.id, 1);
     setLastScannedItem(item);
     showToast(`${t.toast.added} (${scanFormatLabel(format)})`);
     if (route.name !== 'sell' && !keepOpen) setRoute({ name: 'sell' });
-  }, [db, changeQuantity, showToast, route.name]);
+  }, [db, cart, changeQuantity, showToast, route.name]);
 
   const confirmSale = useCallback(async () => {
     if (!cartLines.length) return;
-    const saleId = await createSale(
-      db,
-      cartLines.map((l) => l.item),
-      cart,
-      taxAmount,
-      'အခွန်',
-    );
-    setCart({});
-    setTaxAmount(0);
-    setCartOpen(false);
-    setLastScannedItem(null);
-    await refreshAll();
-    setRoute({ name: 'receipt', saleId });
-  }, [db, cartLines, cart, taxAmount, refreshAll]);
+    try {
+      const saleId = await createSale(
+        db,
+        cartLines.map((l) => l.item),
+        cart,
+        taxAmount,
+        'အခွန်',
+      );
+      setCart({});
+      setTaxAmount(0);
+      setCartOpen(false);
+      setLastScannedItem(null);
+      await refreshAll();
+      setRoute({ name: 'receipt', saleId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      Alert.alert(message === INSUFFICIENT_STOCK_ERROR ? t.cart.stockUnavailable : t.cart.checkoutError);
+      await refreshAll();
+    }
+  }, [db, cartLines, cart, taxAmount, refreshAll, showToast]);
 
   const clearCart = useCallback(() => {
     setCart({});

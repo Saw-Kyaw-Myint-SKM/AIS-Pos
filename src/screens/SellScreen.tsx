@@ -277,7 +277,7 @@ export default function SellScreen({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F5F5F5' },
   header: {
-    height: 58,
+    height: 56,
     backgroundColor: '#4A6CF7',
     flexDirection: 'row',
     alignItems: 'center',

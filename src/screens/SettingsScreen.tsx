@@ -227,7 +227,7 @@ export default function SettingsScreen({
             <AppText bold style={styles.modalTitle}>{t.settings.unlockTitle}</AppText>
             <AppText style={styles.modalBody}>{t.settings.unlockBody}</AppText>
             <TextInput
-              style={[styles.modalInput, codeError ? styles.modalInputError : null]}
+              style={[styles.unlockInput, codeError ? styles.modalInputError : null]}
               value={code}
               onChangeText={(v) => {
                 setCode(v.replace(/[^0-9]/g, ''));
@@ -241,20 +241,20 @@ export default function SettingsScreen({
               autoFocus
             />
             {codeError ? <AppText style={styles.modalError}>{codeError}</AppText> : null}
-            <View style={styles.modalActions}>
+            <View style={styles.unlockActions}>
               <Pressable
                 accessibilityRole="button"
                 onPress={() => setUnlockOpen(false)}
-                style={({ pressed }) => [styles.modalCancelBtn, pressed && { opacity: 0.7 }]}
+                style={({ pressed }) => [styles.unlockCancelBtn, pressed && { opacity: 0.7 }]}
               >
-                <AppText style={styles.modalCancelText}>{t.settings.cancel}</AppText>
+                <AppText style={styles.unlockCancelText}>{t.settings.cancel}</AppText>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
                 onPress={submitUnlock}
-                style={({ pressed }) => [styles.modalOkBtn, pressed && { opacity: 0.9 }]}
+                style={({ pressed }) => [styles.unlockOkBtn, pressed && { opacity: 0.9 }]}
               >
-                <AppText bold style={styles.modalOkText}>{t.settings.unlock}</AppText>
+                <AppText bold style={styles.unlockOkText}>{t.settings.unlock}</AppText>
               </Pressable>
             </View>
           </View>
@@ -315,12 +315,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 14,
+    minHeight: 56,
+    paddingVertical: 8,
     gap: 10,
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerText: { flex: 1, alignItems: 'center' },
-  title: { color: '#fff', fontSize: 20, fontFamily: font.bold },
+  title: { color: '#fff', fontSize: 18, fontFamily: font.bold },
   subtitle: { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontFamily: font.regular, marginTop: 2 },
   scroll: {
     paddingHorizontal: 20,
@@ -425,6 +426,24 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontFamily: font.regular,
   },
+  unlockInput: {
+    alignSelf: 'stretch',
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#E2E2EA',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    fontSize: 16,
+    letterSpacing: 4,
+    color: '#1F2330',
+    fontFamily: font.regular,
+  },
+  unlockActions: { flexDirection: 'row', gap: 10, marginTop: 16, alignSelf: 'stretch' },
+  unlockCancelBtn: { flex: 1, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: '#E2E2EA', alignItems: 'center' },
+  unlockCancelText: { color: '#1F2330', fontSize: 14, fontFamily: font.regular },
+  unlockOkBtn: { flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: '#4A6CF7', alignItems: 'center' },
+  unlockOkText: { color: '#FFFFFF', fontSize: 14, fontFamily: font.bold },
   modalInput: {
     alignSelf: 'stretch',
     marginTop: 18,

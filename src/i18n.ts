@@ -25,7 +25,7 @@ export const t = {
   stockAlert: {
     title: 'စတော့ သတိပေး',
     subtitle: 'စတော့နည်းနေသော ပစ္စည်းများ',
-    targetButton: 'စတော့ ပမာဏ သတ်မှတ်ရန်',
+    targetButton: 'သတ်မှတ်ရန်',
     targetLabel: 'လက်ရှိ သတ်မှတ်ပမာဏ',
     targetHint: 'ဤအရေအတွက်နှင့် တူသော သို့မဟုတ် နည်းသော စတော့များကို ပြမည်',
     targetModalTitle: 'စတော့ ပမာဏ သတ်မှတ်ရန်',
@@ -136,6 +136,9 @@ export const t = {
     scan: 'QR / ဘား',
     tapToAdd: 'ပစ္စည်းကဒ်ကို နှိပ်၍ စျေးခြင်းထဲ ထည့်ပါ',
     stock: 'စတော့',
+    quantity: 'အရေအတွက်',
+    add: 'ရောင်းမည်',
+    soldOut: 'ကုန်သွားပါပြီ',
   },
   cart: {
     title: 'စျေးခြင်း',
@@ -163,6 +166,8 @@ export const t = {
     taxAmountLabel: 'ပမာဏ (ကျပ်)',
     taxAmountPlaceholder: 'ဥပမာ - ၅၀၀ ကျပ်',
     taxAmountInvalid: '၀ နှင့းအထက်ရှိသော ကိန်းဂဏန်းကို ထည့်ပါ',
+    stockUnavailable: 'လက်ကျန်မလုံလောက်ပါ',
+    checkoutError: 'ငွေရှင်း၍ မရပါ။ ထပ်မံကြိုးစားပါ',
     save: 'သိမ်းရန်',
   },
   items: {

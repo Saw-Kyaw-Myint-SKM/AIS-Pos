@@ -6,7 +6,7 @@ import { BackArrowIcon, PrinterIcon } from '../components/ServiceIcon';
 import type { PaperWidth } from '../db';
 import { t } from '../i18n';
 import { simulateReceiptPrint } from '../thermalPrint';
-import { font } from '../theme';
+import { colors, font } from '../theme';
 
 type Props = {
   onBack: () => void;
@@ -95,9 +95,9 @@ export default function PrinterScreen({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F5F6FA' },
-  header: { backgroundColor: '#3B3F76', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 14 },
+  header: { backgroundColor: colors.sellBlue, minHeight: 56, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8 },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  title: { flex: 1, color: '#FFFFFF', fontSize: 20, textAlign: 'center' },
+  title: { flex: 1, color: '#FFFFFF', fontSize: 18, textAlign: 'center' },
   scroll: { paddingHorizontal: 20, paddingTop: 20 },
   sectionLabel: { color: '#7A8880', fontSize: 12, fontFamily: font.bold, marginTop: 18, marginBottom: 10, marginHorizontal: 4 },
   group: { backgroundColor: '#FFFFFF', borderRadius: 18, overflow: 'hidden', elevation: 2 },
@@ -112,6 +112,6 @@ const styles = StyleSheet.create({
   check: { color: '#3B3F76', fontSize: 18 },
   divider: { height: 1, backgroundColor: '#F0F0F4', marginLeft: 76 },
   compatibility: { color: '#7A8880', fontSize: 12, marginHorizontal: 4, marginTop: 8 },
-  testBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#3B3F76', borderRadius: 16, paddingVertical: 15, marginTop: 24 },
+  testBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.sellBlue, borderRadius: 16, paddingVertical: 15, marginTop: 24 },
   testText: { color: '#FFFFFF', fontSize: 15, fontFamily: font.bold },
 });
