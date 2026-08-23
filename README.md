@@ -41,6 +41,37 @@ npm start -- --clear
 
 The Expo Go app and the project SDK must be compatible. Do not use an old Expo Go APK. If the Play Store cannot update Expo Go on the device, use a supported physical Android device or create an Expo development build instead.
 
+## Build an Android APK with EAS
+
+Use an APK build to install AIS POS directly on an Android phone. In Git Bash, sign in and configure EAS once:
+
+```bash
+eas login
+eas build:configure
+```
+
+Ensure `eas.json` includes an Android `preview` profile with `"buildType": "apk"`:
+
+```json
+{
+  "build": {
+    "preview": {
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  }
+}
+```
+
+Start the APK build with:
+
+```bash
+eas build --platform android --profile preview
+```
+
+EAS prints a build URL. When the build finishes, open that URL on the Android phone and download the APK to install it. For Google Play publishing, build an AAB instead with `eas build --platform android --profile production`.
+
 ## Scanning
 
 The scanner accepts **QR, EAN-13, EAN-8, UPC-A, UPC-E, and Code 128** codes. A toggle inside the scanner switches between single-scan mode (closes after one scan) and continuous multi-scan mode (keeps scanning with an on-screen counter). The scanned value is matched against each item's `QR / ဘားကုဒ်` field in the local database, so enter the barcode digits (e.g. an EAN-13 number) as the item's code to make barcode labels scannable.

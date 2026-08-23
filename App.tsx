@@ -52,6 +52,9 @@ type Route =
   | { name: 'printer' }
   | { name: 'stockAlert' };
 
+const isDuplicateBarcodeError = (error: unknown): boolean =>
+  error instanceof Error && /unique constraint failed:\s*items\.qr_code/i.test(error.message);
+
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
     'Pyidaungsu-Regular': require('./assets/fonts/Pyidaungsu-Regular.ttf'),
@@ -222,7 +225,12 @@ function PosApp({
 
   const onScanned = useCallback(async (value: string, format: string, keepOpen: boolean) => {
     if (!keepOpen) setScannerOpen(false);
-    const item = await findClothingByQr(db, value.trim());
+    const scannedCode = value.trim();
+    if (!scannedCode) {
+      Alert.alert(t.scanner.notFoundTitle, `${value}\n${t.scanner.notFoundBody}`);
+      return;
+    }
+    const item = await findClothingByQr(db, scannedCode);
     if (!item) {
       Alert.alert(t.scanner.notFoundTitle, `${value}\n${t.scanner.notFoundBody}`);
       return;
@@ -343,12 +351,13 @@ function PosApp({
       Alert.alert(t.items.invalidTitle, t.items.invalidBody);
       return;
     }
+    const normalizedQrCode = form.qrCode.trim();
     try {
       await saveClothingItem(db, {
         id: form.id,
         name: form.name.trim(),
         size: form.size.trim(),
-        qrCode: form.qrCode.trim(),
+        qrCode: normalizedQrCode || null,
         price,
         categoryId: form.categoryId,
         stock,
@@ -360,8 +369,11 @@ function PosApp({
       setRoute({ name: 'clothes' });
       await refreshAll();
       showToast(t.toast.saved);
-    } catch {
-      Alert.alert(t.items.dupTitle, t.items.dupBody);
+    } catch (error) {
+      Alert.alert(
+        t.items.dupTitle,
+        normalizedQrCode && isDuplicateBarcodeError(error) ? t.items.dupBody : t.cart.checkoutError,
+      );
     }
   }, [db, refreshAll, showToast]);
 
@@ -629,9 +641,9 @@ const styles = StyleSheet.create({
   content: { flex: 1, backgroundColor: '#FFFFFF' },
   toast: {
     position: 'absolute', top: 48, left: 24, right: 24,
-    backgroundColor: '#111827', borderRadius: 12,
+    backgroundColor: '#DCFCE7', borderRadius: 12,
     paddingVertical: 12, alignItems: 'center',
     shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6,
   },
-  toastText: { color: '#fff', fontSize: 14 },
+  toastText: { color: '#166534', fontSize: 14 },
 });

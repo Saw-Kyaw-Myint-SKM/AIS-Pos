@@ -142,7 +142,7 @@ export async function initializeDatabase(db: SQLiteDatabase) {
     );
     CREATE TABLE IF NOT EXISTS items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      qr_code TEXT NOT NULL UNIQUE,
+      qr_code TEXT UNIQUE,
       name TEXT NOT NULL,
       size TEXT NOT NULL,
       price REAL NOT NULL CHECK (price >= 0),
@@ -177,7 +177,7 @@ export async function initializeDatabase(db: SQLiteDatabase) {
     );
   `);
 
-  const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(items)');
+  const cols = await db.getAllAsync<{ name: string; notnull: number }>('PRAGMA table_info(items)');
   const colNames = new Set(cols.map((c) => c.name));
   if (!colNames.has('category')) {
     await db.execAsync("ALTER TABLE items ADD COLUMN category TEXT NOT NULL DEFAULT ''");
@@ -199,6 +199,46 @@ export async function initializeDatabase(db: SQLiteDatabase) {
   }
   if (!colNames.has('category_id')) {
     await db.execAsync('ALTER TABLE items ADD COLUMN category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL');
+  }
+
+  const qrCodeColumn = cols.find((column) => column.name === 'qr_code');
+  if (qrCodeColumn?.notnull) {
+    const foreignKeys = await db.getFirstAsync<{ foreign_keys: number }>('PRAGMA foreign_keys');
+    await db.execAsync('PRAGMA foreign_keys = OFF');
+    try {
+      await db.withTransactionAsync(async () => {
+        await db.execAsync(`
+          CREATE TABLE items_rebuilt (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            qr_code TEXT UNIQUE,
+            name TEXT NOT NULL,
+            size TEXT NOT NULL,
+            price REAL NOT NULL CHECK (price >= 0),
+            category TEXT NOT NULL DEFAULT '',
+            category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+            stock INTEGER NOT NULL DEFAULT 0,
+            choice_type TEXT NOT NULL DEFAULT 'color',
+            color_value TEXT NOT NULL DEFAULT '',
+            photo_uri TEXT NOT NULL DEFAULT '',
+            note TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          );
+          INSERT INTO items_rebuilt (
+            id, qr_code, name, size, price, category, category_id, stock,
+            choice_type, color_value, photo_uri, note, created_at, updated_at
+          )
+          SELECT
+            id, NULLIF(TRIM(qr_code), ''), name, size, price, category, category_id, stock,
+            choice_type, color_value, photo_uri, note, created_at, updated_at
+          FROM items;
+          DROP TABLE items;
+          ALTER TABLE items_rebuilt RENAME TO items;
+        `);
+      });
+    } finally {
+      await db.execAsync(`PRAGMA foreign_keys = ${foreignKeys?.foreign_keys ? 'ON' : 'OFF'}`);
+    }
   }
 
   const salesCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(sales)');
@@ -330,7 +370,7 @@ export async function saveCustomerProfile(
 export async function getClothingItems(db: SQLiteDatabase) {
   return db.getAllAsync<ClothingItem>(
     `SELECT
-       c.id, c.qr_code AS qrCode, c.name, c.size, c.price,
+       c.id, COALESCE(c.qr_code, '') AS qrCode, c.name, c.size, c.price,
        c.category_id AS categoryId,
        COALESCE(cat.name, '') AS categoryName,
        COALESCE(cat.color, '') AS categoryColor,
@@ -343,9 +383,12 @@ export async function getClothingItems(db: SQLiteDatabase) {
 }
 
 export async function findClothingByQr(db: SQLiteDatabase, qrCode: string) {
+  const normalizedQrCode = qrCode.trim();
+  if (!normalizedQrCode) return null;
+
   return db.getFirstAsync<ClothingItem>(
     `SELECT
-       c.id, c.qr_code AS qrCode, c.name, c.size, c.price,
+       c.id, COALESCE(c.qr_code, '') AS qrCode, c.name, c.size, c.price,
        c.category_id AS categoryId,
        COALESCE(cat.name, '') AS categoryName,
        COALESCE(cat.color, '') AS categoryColor,
@@ -353,13 +396,20 @@ export async function findClothingByQr(db: SQLiteDatabase, qrCode: string) {
        c.photo_uri AS photoUri, c.note
      FROM items c
      LEFT JOIN categories cat ON cat.id = c.category_id
-     WHERE c.qr_code = ?`, qrCode,
+     WHERE c.qr_code = ?`, normalizedQrCode,
   );
 }
 
+type ClothingItemInput = Omit<
+  Pick<ClothingItem, 'id' | 'qrCode' | 'name' | 'size' | 'price' | 'categoryId' | 'stock' | 'choiceType' | 'colorValue' | 'photoUri' | 'note'>,
+  'qrCode'
+> & {
+  qrCode: string | null;
+};
+
 export async function saveClothingItem(
   db: SQLiteDatabase,
-  item: Pick<ClothingItem, 'id' | 'qrCode' | 'name' | 'size' | 'price' | 'categoryId' | 'stock' | 'choiceType' | 'colorValue' | 'photoUri' | 'note'>,
+  item: ClothingItemInput,
 ) {
   if (item.id) {
     await db.runAsync(
