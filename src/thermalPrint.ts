@@ -129,6 +129,36 @@ async function connectWithRetry(
   throw new ThermalPrintError('connect_timeout', { cause: lastError });
 }
 
+export async function checkThermalPrinterConnection(
+  config: ThermalPrinterConfig,
+  options: ThermalPrintOptions = {},
+): Promise<void> {
+  const adapter = options.adapter ?? (
+    config.mode === 'mock' ? createMockPrinterAdapter() : createEpsonPrinterAdapter(config)
+  );
+  const attempts = Math.max(1, options.connectAttempts ?? 3);
+  const connectTimeoutMs = options.connectTimeoutMs ?? 1500;
+  const retryDelayMs = options.retryDelayMs ?? 300;
+  const sleep = options.sleep ?? wait;
+
+  await adapter.runExclusive(async () => {
+    let primaryError: unknown;
+    try {
+      await connectWithRetry(adapter, attempts, connectTimeoutMs, retryDelayMs, sleep);
+    } catch (error) {
+      primaryError = error;
+      if (error instanceof ThermalPrintError) throw error;
+      throw new ThermalPrintError('unknown', { cause: error });
+    } finally {
+      try {
+        await adapter.disconnect();
+      } catch (disconnectError) {
+        if (!primaryError) throw new ThermalPrintError('unknown', { cause: disconnectError });
+      }
+    }
+  });
+}
+
 export async function printImageToThermal(
   imageUri: string,
   config: ThermalPrinterConfig,

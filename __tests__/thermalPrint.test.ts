@@ -1,4 +1,5 @@
 import {
+  checkThermalPrinterConnection,
   printImageToThermal,
   ThermalPrintError,
   type ThermalPrinterAdapter,
@@ -34,6 +35,22 @@ describe('thermal print orchestration', () => {
     await printImageToThermal('file:///receipt.png', { ...config, paperWidth: '80', autoCut: false }, { adapter });
     expect(calls).toContain('image:576');
     expect(calls).not.toContain('cut');
+  });
+
+  test('checks connection without sending a receipt and disconnects', async () => {
+    const { adapter, calls } = createAdapter();
+    await checkThermalPrinterConnection(config, { adapter });
+    expect(calls).toEqual(['queue', 'connect', 'status', 'disconnect']);
+  });
+
+  test('reports an offline connection check and disconnects', async () => {
+    const { adapter, calls } = createAdapter({
+      getStatus: async () => { calls.push('status'); return { online: { statusCode: 0 } }; },
+    });
+    await expect(checkThermalPrinterConnection(config, {
+      adapter, connectAttempts: 1,
+    })).rejects.toMatchObject({ code: 'offline' });
+    expect(calls).toEqual(['queue', 'connect', 'status', 'disconnect']);
   });
 
   test('retries an offline printer a bounded number of times then disconnects', async () => {

@@ -14,9 +14,9 @@ import {
   findClothingByQr,
   getAppSetting, getCategories, getClothingItems, getCustomerProfile, getSales, getTodaySummary,
   importDatabaseFile, initializeDatabase,
-  reorderCategories, saveCategory, saveClothingItem,
+  reorderCategories, saveCategory, saveClothingItem, savePrinterSettings,
   DEFAULT_PRINTER_MODE, DEFAULT_STOCK_ALERT_LIMIT,
-  SETTING_PRINTER_AUTO_CUT, SETTING_PRINTER_DEVICE_NAME, SETTING_PRINTER_MODE,
+  SETTING_PRINTER_AUTO_CUT, SETTING_PRINTER_DEVICE_NAME,
   SETTING_PRINTER_PAPER_WIDTH, SETTING_PRINTER_TARGET,
   SETTING_SHOP_NAME, SETTING_SHOP_NAME_UNLOCKED, SETTING_STOCK_ALERT_LIMIT, setAppSetting,
   type Category, type ClothingItem, type CustomerProfile, type PaperWidth, type PrinterMode, type Sale, type TodaySummary,
@@ -135,7 +135,6 @@ function PosApp({
       const unlocked = await getAppSetting(db, SETTING_SHOP_NAME_UNLOCKED);
       const pTarget = await getAppSetting(db, SETTING_PRINTER_TARGET);
       const pName = await getAppSetting(db, SETTING_PRINTER_DEVICE_NAME);
-      const pMode = await getAppSetting(db, SETTING_PRINTER_MODE);
       const pWidth = await getAppSetting(db, SETTING_PRINTER_PAPER_WIDTH);
       const pAutoCut = await getAppSetting(db, SETTING_PRINTER_AUTO_CUT);
       const savedStockAlertLimit = await getAppSetting(db, SETTING_STOCK_ALERT_LIMIT);
@@ -149,7 +148,7 @@ function PosApp({
       setShopUnlocked(unlocked === '1');
       setPrinterTarget(pTarget ?? '');
       setPrinterDeviceName(pName ?? '');
-      setPrinterModeState(pMode === 'mock' ? 'mock' : DEFAULT_PRINTER_MODE);
+      setPrinterModeState(DEFAULT_PRINTER_MODE);
       setPaperWidthState((pWidth === '80' ? '80' : '58') as PaperWidth);
       setPrinterAutoCutState(pAutoCut !== '0');
       setStockAlertLimit(nextStockAlertLimit);
@@ -179,26 +178,28 @@ function PosApp({
     setShopName(trimmed);
   }, [db]);
 
-  const selectPrinter = useCallback(async (target: string, deviceName: string) => {
-    await setAppSetting(db, SETTING_PRINTER_TARGET, target);
-    await setAppSetting(db, SETTING_PRINTER_DEVICE_NAME, deviceName);
+  const savePrinterConfiguration = useCallback(async ({
+    target,
+    deviceName,
+    paperWidth: nextPaperWidth,
+    autoCut: nextAutoCut,
+  }: {
+    target: string;
+    deviceName: string;
+    paperWidth: PaperWidth;
+    autoCut: boolean;
+  }) => {
+    await savePrinterSettings(db, {
+      target,
+      deviceName,
+      paperWidth: nextPaperWidth,
+      autoCut: nextAutoCut,
+    });
     setPrinterTarget(target);
     setPrinterDeviceName(deviceName);
-  }, [db]);
-
-  const setPrinterMode = useCallback(async (mode: PrinterMode) => {
-    await setAppSetting(db, SETTING_PRINTER_MODE, mode);
-    setPrinterModeState(mode);
-  }, [db]);
-
-  const setPaperWidth = useCallback(async (width: PaperWidth) => {
-    await setAppSetting(db, SETTING_PRINTER_PAPER_WIDTH, width);
-    setPaperWidthState(width);
-  }, [db]);
-
-  const setPrinterAutoCut = useCallback(async (enabled: boolean) => {
-    await setAppSetting(db, SETTING_PRINTER_AUTO_CUT, enabled ? '1' : '0');
-    setPrinterAutoCutState(enabled);
+    setPrinterModeState(DEFAULT_PRINTER_MODE);
+    setPaperWidthState(nextPaperWidth);
+    setPrinterAutoCutState(nextAutoCut);
   }, [db]);
 
   const saveStockAlertLimit = useCallback(async (limit: number) => {
@@ -630,10 +631,7 @@ function PosApp({
             paperWidth={paperWidth}
             autoCut={printerAutoCut}
             shopName={shopName}
-            onSelectPrinter={selectPrinter}
-            onSetPrinterMode={setPrinterMode}
-            onSetPaperWidth={setPaperWidth}
-            onSetAutoCut={setPrinterAutoCut}
+            onSaveSettings={savePrinterConfiguration}
             onToast={showToast}
           />
         )}

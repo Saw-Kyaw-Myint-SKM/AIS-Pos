@@ -56,7 +56,7 @@ export default function ReceiptScreen({
   };
 
   const handlePrint = () => {
-    if (printerMode === 'epson' && !printerTarget) {
+    if (!printerTarget) {
       onToast(t.printer.notSelected);
       onSelectPrinter();
       return;

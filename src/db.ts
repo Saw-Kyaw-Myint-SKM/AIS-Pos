@@ -614,6 +614,33 @@ export async function setAppSetting(db: SQLiteDatabase, key: string, value: stri
   );
 }
 
+export type PrinterSettings = {
+  target: string;
+  deviceName: string;
+  paperWidth: PaperWidth;
+  autoCut: boolean;
+};
+
+export async function savePrinterSettings(db: SQLiteDatabase, settings: PrinterSettings): Promise<void> {
+  const entries: Array<[string, string]> = [
+    [SETTING_PRINTER_TARGET, settings.target],
+    [SETTING_PRINTER_DEVICE_NAME, settings.deviceName],
+    [SETTING_PRINTER_PAPER_WIDTH, settings.paperWidth],
+    [SETTING_PRINTER_MODE, DEFAULT_PRINTER_MODE],
+    [SETTING_PRINTER_AUTO_CUT, settings.autoCut ? '1' : '0'],
+  ];
+
+  await db.withTransactionAsync(async () => {
+    for (const [key, value] of entries) {
+      await db.runAsync(
+        `INSERT INTO app_settings (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+        key, value,
+      );
+    }
+  });
+}
+
 export const DATABASE_FILE_NAME = 'clothes-pos.db';
 
 export async function exportDatabaseFile(db: SQLiteDatabase): Promise<string> {

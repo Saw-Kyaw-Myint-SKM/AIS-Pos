@@ -37,7 +37,7 @@
 
 ### Real mode — `epson`
 
-- Paired Bluetooth printer များကို discovery လုပ်သည်။
+- Nearby Bluetooth printer များကို discovery လုပ်သည်။ Epson ePOS discovery အကန့်အသတ်ကြောင့် Generic ESC/POS device များကို အပြည့်အဝမအာမခံပါ။
 - Printer မရွေးရသေးလျှင် receipt print မလုပ်မီ printer settings screen သို့ပို့သည်။
 - Receipt image ကို physical printer သို့ ESC/POS transport ဖြင့်ပို့သည်။
 
@@ -53,7 +53,7 @@
 flowchart TD
   A[Printer Settings ဖွင့်] --> B{Mock mode လား?}
   B -->|ဟုတ်| C[Discovery မလုပ်]
-  B -->|မဟုတ်| D[Paired Bluetooth printers ရှာ]
+  B -->|မဟုတ်| D[Nearby Bluetooth printers ရှာ]
   D --> E[Printer list ပြ]
   E --> F[Printer ရွေး]
   F --> G[target / device name ကို SQLite တွင်သိမ်း]
@@ -62,7 +62,8 @@ flowchart TD
 `PrinterScreen.tsx` သည် `react-native-esc-pos-printer` ၏ discovery hook ကိုသုံးပါသည်။
 
 Discovery filter:
-- `bondedDevices: TRUE` — Android Bluetooth settings တွင် အရင် pair လုပ်ထားသော devices များသာ
+- `bondedDevices: FALSE` — nearby Bluetooth device များကိုရှာသည်
+- `epsonFilter: FILTER_NONE` — Epson-name filter ကိုမသုံးပါ
 - `portType: BLUETOOTH`
 - `deviceModel: MODEL_ALL`
 
@@ -140,11 +141,20 @@ Print modal တွင် error message ပြပြီး retry button ဖြင
 
 Real printer mode အတွက် Android native build လိုအပ်ပါသည်။
 
-### လက်ရှိ Permission အခြေအနေ
+### Permission အခြေအနေ
 
-လက်ရှိ `app.json` တွင် `android.permission.INTERNET` နှင့် `android.permission.CAMERA` သာ ထည့်ထားပြီး Bluetooth/location permission များ **မထည့်ရသေးပါ**။ ထို့ကြောင့် real Bluetooth printer discovery နှင့် connection ကို physical Android device ပေါ်တွင် အတည်မပြုရသေးပါ။
+`app.json` တွင် Bluetooth Classic discovery အတွက် လိုအပ်သော Android permissions များကို ထည့်ထားပါသည်။
 
-Real printer ကို အသုံးပြုမည်ဆိုပါက target Android version နှင့် printer library လိုအပ်ချက်အလိုက် Bluetooth permissions ကို `app.json` တွင် ထည့်ရမည်၊ native app ကို rebuild ပြုလုပ်ရမည်၊ လိုအပ်သော runtime permissions များကိုလည်း request ပြုလုပ်ရမည်။ ဥပမာ Android version အသစ်များအတွက် `android.permission.BLUETOOTH_SCAN` နှင့် `android.permission.BLUETOOTH_CONNECT` လိုအပ်နိုင်ပါသည်။
+ထည့်ထားသော permissions:
+
+- `android.permission.BLUETOOTH`
+- `android.permission.BLUETOOTH_ADMIN`
+- `android.permission.BLUETOOTH_SCAN`
+- `android.permission.BLUETOOTH_CONNECT`
+- `android.permission.ACCESS_COARSE_LOCATION`
+- `android.permission.ACCESS_FINE_LOCATION`
+
+`react-native-esc-pos-printer` သည် Android version အလိုက် လိုအပ်သော runtime permission ကို request ပြုလုပ်ပါသည်။ Permission configuration ပြောင်းပြီးတိုင်း native Android app ကို rebuild/install ပြန်လုပ်ရန်လိုပါသည်။
 
 အသုံးပြုထားသော native libraries:
 - `react-native-esc-pos-printer`

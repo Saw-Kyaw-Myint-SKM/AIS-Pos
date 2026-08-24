@@ -53,7 +53,7 @@ export default function SaleDetailScreen({
   };
 
   const handlePrint = () => {
-    if (printerMode === 'epson' && !printerTarget) {
+    if (!printerTarget) {
       onToast(t.printer.notSelected);
       onSelectPrinter();
       return;
