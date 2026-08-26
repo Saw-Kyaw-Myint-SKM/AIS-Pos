@@ -30,6 +30,8 @@ export default function Receipt({ saleId, shopName }: Props) {
     return <View style={styles.loading}><AppText style={{ color: colors.muted }}>—</AppText></View>;
   }
 
+  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
   return (
     <View style={styles.paper}>
       <AppText bold style={styles.shop}>{shopName}</AppText>
@@ -51,7 +53,7 @@ export default function Receipt({ saleId, shopName }: Props) {
       <View style={styles.dash} />
       <View style={styles.summaryRow}>
         <AppText style={styles.summaryLabel}>{t.cart.subtotal}</AppText>
-        <AppText style={styles.summaryValue}>{formatKyat(sale.total - sale.taxAmount)}</AppText>
+        <AppText style={styles.summaryValue}>{formatKyat(subtotal)}</AppText>
       </View>
       {sale.taxAmount > 0 && (
         <View style={styles.summaryRow}>
@@ -59,6 +61,14 @@ export default function Receipt({ saleId, shopName }: Props) {
             {t.cart.tax} ({(sale.taxReason || 'အခွန်')})
           </AppText>
           <AppText style={styles.summaryValue}>{formatKyat(sale.taxAmount)}</AppText>
+        </View>
+      )}
+      {sale.discountAmount > 0 && (
+        <View style={styles.summaryRow}>
+          <AppText style={styles.summaryLabel}>
+            {t.cart.discount} ({(sale.discountReason || 'လျော့စျေး')})
+          </AppText>
+          <AppText style={styles.summaryValue}>− {formatKyat(sale.discountAmount)}</AppText>
         </View>
       )}
       <View style={styles.totalRow}>

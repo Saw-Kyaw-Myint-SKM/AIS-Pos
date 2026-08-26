@@ -25,8 +25,10 @@ type Props = {
   lines: CartLine[];
   subtotal: number;
   taxAmount: number;
+  discountAmount: number;
   total: number;
   onSetTax: (n: number) => void;
+  onSetDiscount: (n: number) => void;
   onClose: () => void;
   onQuantity: (id: number, delta: number) => void;
   onClear: () => void;
@@ -38,8 +40,10 @@ export default function CartSheet({
   lines,
   subtotal,
   taxAmount,
+  discountAmount,
   total,
   onSetTax,
+  onSetDiscount,
   onClose,
   onQuantity,
   onClear,
@@ -49,11 +53,13 @@ export default function CartSheet({
   const isEmpty = lines.length === 0;
   const [confirm, setConfirm] = useState<'clear' | 'checkout' | null>(null);
   const [taxModalOpen, setTaxModalOpen] = useState(false);
+  const [discountModalOpen, setDiscountModalOpen] = useState(false);
 
   useEffect(() => {
     if (!visible) {
       setConfirm(null);
       setTaxModalOpen(false);
+      setDiscountModalOpen(false);
     }
   }, [visible]);
 
@@ -195,6 +201,39 @@ export default function CartSheet({
               </Pressable>
             )}
 
+            {discountAmount > 0 ? (
+              <View style={styles.taxRow}>
+                <AppText style={styles.totalLabel}>{t.cart.discount}</AppText>
+                <View style={styles.taxRight}>
+                  <AppText bold style={styles.totalValue}>− {formatKyat(discountAmount)}</AppText>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t.cart.editDiscount}
+                    onPress={() => setDiscountModalOpen(true)}
+                    style={({ pressed }) => [styles.taxEditBtn, pressed && { opacity: 0.7 }]}
+                  >
+                    <AppText style={styles.taxEditText}>{t.cart.editDiscount}</AppText>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t.cart.clearDiscount}
+                    onPress={() => onSetDiscount(0)}
+                    style={({ pressed }) => [styles.taxClearBtn, pressed && { opacity: 0.7 }]}
+                  >
+                    <AppText bold style={styles.taxClearText}>✕</AppText>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setDiscountModalOpen(true)}
+                style={({ pressed }) => [styles.addTaxBtn, pressed && { opacity: 0.6 }]}
+              >
+                <AppText bold style={styles.addTaxText}>{t.cart.addDiscount}</AppText>
+              </Pressable>
+            )}
+
             <View style={styles.totalDivider} />
 
             <View style={styles.totalRow}>
@@ -277,6 +316,16 @@ export default function CartSheet({
         setTaxModalOpen(false);
       }}
     />
+    <DiscountModal
+      visible={discountModalOpen}
+      initialAmount={discountAmount}
+      maximumAmount={subtotal + taxAmount}
+      onClose={() => setDiscountModalOpen(false)}
+      onSave={(n) => {
+        onSetDiscount(n);
+        setDiscountModalOpen(false);
+      }}
+    />
     </>
   );
 }
@@ -356,6 +405,68 @@ function TaxModal({ visible, initialAmount, onClose, onSave }: TaxModalProps) {
               onPress={handleSave}
               style={({ pressed }) => [styles.taxSaveBtn, pressed && { opacity: 0.9 }]}
             >
+              <AppText bold style={styles.taxSaveText}>{t.cart.save}</AppText>
+            </Pressable>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+type DiscountModalProps = TaxModalProps & { maximumAmount: number };
+
+function DiscountModal({ visible, initialAmount, maximumAmount, onClose, onSave }: DiscountModalProps) {
+  const [discountInput, setDiscountInput] = useState('');
+  const [discountError, setDiscountError] = useState('');
+
+  useEffect(() => {
+    if (visible) {
+      setDiscountInput(initialAmount > 0 ? String(initialAmount) : '');
+      setDiscountError('');
+    }
+  }, [visible, initialAmount]);
+
+  const handleSave = () => {
+    const cleaned = discountInput.replace(/[^\d.]/g, '');
+    const n = Number(cleaned);
+    if (!Number.isFinite(n) || n < 0 || n > maximumAmount) {
+      setDiscountError(t.cart.discountAmountInvalid);
+      return;
+    }
+    onSave(n);
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.taxOverlay}
+      >
+        <Pressable style={styles.taxBackdrop} onPress={onClose} />
+        <View style={styles.taxBox}>
+          <AppText bold style={styles.taxTitle}>{t.cart.discountModalTitle}</AppText>
+          <AppText style={styles.taxFieldLabel}>{t.cart.taxAmountLabel}</AppText>
+          <View style={[styles.taxInputWrap, discountError ? styles.taxInputWrapError : null]}>
+            <TextInput
+              style={styles.taxInput}
+              value={discountInput}
+              onChangeText={(v) => {
+                setDiscountInput(v);
+                if (discountError) setDiscountError('');
+              }}
+              keyboardType="numeric"
+              placeholder={t.cart.taxAmountPlaceholder}
+              placeholderTextColor={colors.muted}
+              autoFocus
+            />
+          </View>
+          {discountError ? <AppText style={styles.taxErrorText}>{discountError}</AppText> : null}
+          <View style={styles.taxActions}>
+            <Pressable accessibilityRole="button" onPress={onClose} style={({ pressed }) => [styles.taxCancelBtn, pressed && { opacity: 0.7 }]}>
+              <AppText style={styles.taxCancelText}>{t.cart.cancel}</AppText>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={handleSave} style={({ pressed }) => [styles.taxSaveBtn, pressed && { opacity: 0.9 }]}>
               <AppText bold style={styles.taxSaveText}>{t.cart.save}</AppText>
             </Pressable>
           </View>
