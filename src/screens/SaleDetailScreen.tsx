@@ -19,6 +19,7 @@ type Props = {
   autoCut: boolean;
   onSelectPrinter: () => void;
   onBack: () => void;
+  onEdit: () => void;
   onToast: (message: string) => void;
 };
 
@@ -32,6 +33,7 @@ export default function SaleDetailScreen({
   autoCut,
   onSelectPrinter,
   onBack,
+  onEdit,
   onToast,
 }: Props) {
   const db = useSQLiteContext();
@@ -73,6 +75,14 @@ export default function SaleDetailScreen({
           <BackArrowIcon size={26} color="#FFFFFF" />
         </Pressable>
         <AppText bold style={styles.title}>{t.receipt.title}</AppText>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t.saleEdit.edit}
+          onPress={onEdit}
+          style={({ pressed }) => [styles.headerEditBtn, pressed && { opacity: 0.7 }]}
+        >
+          <AppText bold style={styles.headerEditText}>{t.saleEdit.edit}</AppText>
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t.printer.print}
@@ -119,7 +129,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 14, gap: 10,
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  title: { flex: 1, color: '#fff', fontSize: 20, textAlign: 'center' },
+  title: { flex: 1, color: '#fff', fontSize: 18, textAlign: 'center' },
+  headerEditBtn: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.7)', borderRadius: 12, paddingHorizontal: 9, paddingVertical: 6 },
+  headerEditText: { color: '#FFFFFF', fontSize: 12 },
   pdfBtn: {
     marginHorizontal: 16,
     borderWidth: 1,

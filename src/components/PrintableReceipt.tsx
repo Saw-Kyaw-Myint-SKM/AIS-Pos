@@ -15,6 +15,7 @@ type Props = {
 const PrintableReceipt = forwardRef<View, Props>(
   ({ sale, items, shopName, paperWidth }, ref) => {
     const width = paperWidthToPx(paperWidth);
+    const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
     return (
       <View ref={ref} collapsable={false} style={[styles.paper, { width }]}>
         <AppText bold style={styles.shop}>{shopName}</AppText>
@@ -34,8 +35,24 @@ const PrintableReceipt = forwardRef<View, Props>(
           </View>
         ))}
         <View style={styles.dash} />
+        <View style={styles.summaryRow}>
+          <AppText style={styles.summaryLabel}>{t.cart.subtotal}</AppText>
+          <AppText style={styles.summaryValue}>{formatKyat(subtotal)}</AppText>
+        </View>
+        {sale.taxAmount > 0 && (
+          <View style={styles.summaryRow}>
+            <AppText style={styles.summaryLabel}>{t.cart.tax}</AppText>
+            <AppText style={styles.summaryValue}>{formatKyat(sale.taxAmount)}</AppText>
+          </View>
+        )}
+        {sale.discountAmount > 0 && (
+          <View style={styles.summaryRow}>
+            <AppText style={styles.summaryLabel}>{t.cart.discount}</AppText>
+            <AppText style={styles.summaryValue}>− {formatKyat(sale.discountAmount)}</AppText>
+          </View>
+        )}
         <View style={styles.totalRow}>
-          <AppText style={styles.totalLabel}>{t.receipt.total}</AppText>
+          <AppText style={styles.totalLabel}>{t.receipt.grandTotal}</AppText>
           <AppText bold style={styles.totalValue}>{formatKyat(sale.total)}</AppText>
         </View>
         <View style={styles.dash} />
@@ -64,6 +81,9 @@ const styles = StyleSheet.create({
   lineName: { fontSize: 14, color: '#000' },
   lineMeta: { color: '#000', fontSize: 11, marginTop: 2 },
   lineAmount: { fontSize: 13, color: '#000' },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  summaryLabel: { fontSize: 12, color: '#000' },
+  summaryValue: { fontSize: 12, color: '#000' },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   totalLabel: { fontSize: 14, color: '#000' },
   totalValue: { fontSize: 18, color: '#000' },

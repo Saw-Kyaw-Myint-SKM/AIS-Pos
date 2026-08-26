@@ -39,6 +39,7 @@ export async function buildReceiptHtml(
 ): Promise<string> {
   const fonts = await loadFonts();
 
+  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const rows = items
     .map(
       (item) => `
@@ -68,6 +69,7 @@ export async function buildReceiptHtml(
   td.name { font-weight: bold; }
   td.qty { color: #666; font-size: 11px; }
   td.amount { text-align: right; white-space: nowrap; }
+  .summary { display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-bottom: 4px; }
   .total { display: flex; justify-content: space-between; align-items: center; }
   .total-label { font-size: 15px; }
   .total-value { font-size: 20px; font-weight: bold; color: #3B82F6; }
@@ -82,8 +84,11 @@ export async function buildReceiptHtml(
   <div class="dash"></div>
   <table>${rows}</table>
   <div class="dash"></div>
+  <div class="summary"><span>${escapeHtml(t.cart.subtotal)}</span><span>${formatKyat(subtotal)}</span></div>
+  ${sale.taxAmount > 0 ? `<div class="summary"><span>${escapeHtml(t.cart.tax)}</span><span>${formatKyat(sale.taxAmount)}</span></div>` : ''}
+  ${sale.discountAmount > 0 ? `<div class="summary"><span>${escapeHtml(t.cart.discount)}</span><span>− ${formatKyat(sale.discountAmount)}</span></div>` : ''}
   <div class="total">
-    <span class="total-label">${escapeHtml(t.receipt.total)}</span>
+    <span class="total-label">${escapeHtml(t.receipt.grandTotal)}</span>
     <span class="total-value">${formatKyat(sale.total)}</span>
   </div>
   <div class="dash"></div>

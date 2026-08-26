@@ -5,7 +5,14 @@ import {
 } from '../src/db';
 
 type FakeItem = Pick<ClothingItem, 'id' | 'stock'>;
-type FakeSale = { id: number; total: number; taxAmount: number; taxReason: string };
+type FakeSale = {
+  id: number;
+  total: number;
+  taxAmount: number;
+  taxReason: string;
+  discountAmount: number;
+  discountReason: string;
+};
 type FakeSaleItem = { saleId: number; clothingId: number; quantity: number };
 
 type FakeDb = {
@@ -30,9 +37,9 @@ function createFakeDb(items: FakeItem[]): FakeDb {
   db.runAsync = async (sql, ...params) => {
     const normalized = sql.trim().toUpperCase();
     if (normalized.startsWith('INSERT INTO SALES')) {
-      const [total, taxAmount, taxReason] = params as [number, number, string];
+      const [total, taxAmount, taxReason, discountAmount, discountReason] = params as [number, number, string, number, string];
       const id = db.nextSaleId++;
-      db.sales.push({ id, total, taxAmount, taxReason });
+      db.sales.push({ id, total, taxAmount, taxReason, discountAmount, discountReason });
       return { lastInsertRowId: id, changes: 1 };
     }
     if (normalized.startsWith('UPDATE ITEMS')) {
@@ -90,11 +97,11 @@ function item(id: number, stock: number, price = 1000): ClothingItem {
 describe('createSale stock handling', () => {
   test('stores the sale and reduces stock after a successful checkout', async () => {
     const db = createFakeDb([{ id: 1, stock: 5 }]);
-    const saleId = await createSale(db as never, [item(1, 5)], { 1: 2 }, 100, 'အခွန်');
+    const saleId = await createSale(db as never, [item(1, 5)], { 1: 2 }, 100, 'အခွန်', 50, 'လျော့စျေး');
 
     expect(saleId).toBe(1);
     expect(db.items[0].stock).toBe(3);
-    expect(db.sales).toEqual([{ id: 1, total: 2100, taxAmount: 100, taxReason: 'အခွန်' }]);
+    expect(db.sales).toEqual([{ id: 1, total: 2050, taxAmount: 100, taxReason: 'အခွန်', discountAmount: 50, discountReason: 'လျော့စျေး' }]);
     expect(db.saleItems).toEqual([{ saleId: 1, clothingId: 1, quantity: 2 }]);
   });
 

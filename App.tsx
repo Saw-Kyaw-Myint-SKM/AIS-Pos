@@ -4,13 +4,14 @@ import { StatusBar } from 'expo-status-bar';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AppText from './src/components/AppText';
 import CartSheet, { type CartLine } from './src/components/CartSheet';
 import {
   createSale, deleteCategory, deleteClothingItem, DEFAULT_PAPER_WIDTH, DEFAULT_SHOP_NAME, exportDatabaseFile, exportDatabaseToDownloads,
-  INSUFFICIENT_STOCK_ERROR,
+  INSUFFICIENT_STOCK_ERROR, SALE_ITEM_UNAVAILABLE_ERROR,
+  updateSale,
   findClothingByQr,
   getAppSetting, getCategories, getClothingItems, getCustomerProfile, getSales, getTodaySummary,
   importDatabaseFile, initializeDatabase,
@@ -19,9 +20,10 @@ import {
   SETTING_PRINTER_AUTO_CUT, SETTING_PRINTER_DEVICE_NAME,
   SETTING_PRINTER_PAPER_WIDTH, SETTING_PRINTER_TARGET,
   SETTING_SHOP_NAME, SETTING_SHOP_NAME_UNLOCKED, SETTING_STOCK_ALERT_LIMIT, setAppSetting,
-  type Category, type ClothingItem, type CustomerProfile, type PaperWidth, type PrinterMode, type Sale, type TodaySummary,
+  type Category, type ClothingItem, type CustomerProfile, type PaperWidth, type PrinterMode, type Sale, type SaleUpdateInput, type TodaySummary,
 } from './src/db';
 import { scanFormatLabel, t } from './src/i18n';
+import { getBackRoute, type Route } from './src/navigation';
 import HistoryScreen from './src/screens/HistoryScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import ItemFormScreen, { emptyForm, itemToForm } from './src/screens/ItemFormScreen';
@@ -33,6 +35,7 @@ import PrinterScreen from './src/screens/PrinterScreen';
 import ReceiptScreen from './src/screens/ReceiptScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import SaleDetailScreen from './src/screens/SaleDetailScreen';
+import SaleEditScreen from './src/screens/SaleEditScreen';
 import ScannerModal from './src/screens/ScannerModal';
 import SellScreen from './src/screens/SellScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -40,22 +43,9 @@ import StockAlertScreen from './src/screens/StockAlertScreen';
 import TabBar from './src/components/TabBar';
 import { colors } from './src/theme';
 
-type Route =
-  | { name: 'register' }
-  | { name: 'home' }
-  | { name: 'sell' }
-  | { name: 'clothes' }
-  | { name: 'history' }
-  | { name: 'receipt'; saleId: number }
-  | { name: 'saleDetail'; saleId: number }
-  | { name: 'itemForm'; itemId?: number }
-  | { name: 'categoryForm'; categoryId?: number }
-  | { name: 'settings' }
-  | { name: 'printer' }
-  | { name: 'stockAlert' };
-
 const isDuplicateBarcodeError = (error: unknown): boolean =>
   error instanceof Error && /unique constraint failed:\s*items\.qr_code/i.test(error.message);
+
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
@@ -106,6 +96,7 @@ function PosApp({
   const [today, setToday] = useState<TodaySummary>({ total: 0, saleCount: 0, itemCount: 0 });
   const [cart, setCart] = useState<Record<number, number>>({});
   const [taxAmount, setTaxAmount] = useState(0);
+  const [discountAmount, setDiscountAmount] = useState(0);
   const [cartOpen, setCartOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [lastScannedItem, setLastScannedItem] = useState<ClothingItem | null>(null);
@@ -120,6 +111,27 @@ function PosApp({
   const [paperWidth, setPaperWidthState] = useState<PaperWidth>(DEFAULT_PAPER_WIDTH);
   const [printerAutoCut, setPrinterAutoCutState] = useState(true);
   const [stockAlertLimit, setStockAlertLimit] = useState(DEFAULT_STOCK_ALERT_LIMIT);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (scannerOpen) {
+        setScannerOpen(false);
+        setLastScannedItem(null);
+        return true;
+      }
+      if (cartOpen) {
+        setCartOpen(false);
+        return true;
+      }
+
+      const backRoute = getBackRoute(route);
+      if (!backRoute) return false;
+      setRoute(backRoute);
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [cartOpen, route, scannerOpen]);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -224,7 +236,8 @@ function PosApp({
     .map((item) => ({ item, quantity: cart[item.id] }));
   const cartCount = cartLines.reduce((sum, line) => sum + line.quantity, 0);
   const cartSubtotal = cartLines.reduce((sum, line) => sum + line.item.price * line.quantity, 0);
-  const cartTotal = cartSubtotal + taxAmount;
+  const appliedDiscount = Math.min(discountAmount, cartSubtotal + taxAmount);
+  const cartTotal = cartSubtotal + taxAmount - appliedDiscount;
 
   const changeQuantity = useCallback((id: number, delta: number) => {
     setCart((current) => {
@@ -287,9 +300,12 @@ function PosApp({
         cart,
         taxAmount,
         'အခွန်',
+        appliedDiscount,
+        'လျော့စျေး',
       );
       setCart({});
       setTaxAmount(0);
+      setDiscountAmount(0);
       setCartOpen(false);
       setLastScannedItem(null);
       await refreshAll();
@@ -299,11 +315,38 @@ function PosApp({
       Alert.alert(message === INSUFFICIENT_STOCK_ERROR ? t.cart.stockUnavailable : t.cart.checkoutError);
       await refreshAll();
     }
-  }, [db, cartLines, cart, taxAmount, refreshAll, showToast]);
+  }, [db, cartLines, cart, taxAmount, appliedDiscount, refreshAll, showToast]);
+
+  const saveSaleEdit = useCallback((saleId: number, input: SaleUpdateInput) => {
+    Alert.alert(t.saleEdit.confirmTitle, t.saleEdit.confirmBody, [
+      { text: t.saleEdit.cancel, style: 'cancel' },
+      {
+        text: t.saleEdit.confirm,
+        onPress: async () => {
+          try {
+            await updateSale(db, saleId, input);
+            await refreshAll();
+            showToast(t.saleEdit.success);
+            setRoute({ name: 'saleDetail', saleId });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : '';
+            if (message === INSUFFICIENT_STOCK_ERROR) {
+              Alert.alert(t.saleEdit.stockUnavailable);
+            } else if (message === SALE_ITEM_UNAVAILABLE_ERROR) {
+              Alert.alert(t.saleEdit.unavailableTitle, t.saleEdit.unavailableBody);
+            } else {
+              Alert.alert(t.saleEdit.saveError);
+            }
+          }
+        },
+      },
+    ]);
+  }, [db, refreshAll, showToast]);
 
   const clearCart = useCallback(() => {
     setCart({});
     setTaxAmount(0);
+    setDiscountAmount(0);
     setLastScannedItem(null);
     showToast(t.toast.cleared);
   }, [showToast]);
@@ -503,7 +546,7 @@ function PosApp({
             onOpenHistory={() => setRoute({ name: 'history' })}
             onScan={() => setScannerOpen(true)}
             onOpenSettings={() => setRoute({ name: 'settings' })}
-            onOpenPrinter={() => setRoute({ name: 'printer' })}
+            onOpenPrinter={() => setRoute({ name: 'printer', returnTo: { name: 'home' } })}
             onOpenStockAlert={() => setRoute({ name: 'stockAlert' })}
             stockAlertLimit={stockAlertLimit}
           />
@@ -554,7 +597,10 @@ function PosApp({
             printerDeviceName={printerDeviceName}
             paperWidth={paperWidth}
             autoCut={printerAutoCut}
-            onSelectPrinter={() => setRoute({ name: 'printer' })}
+            onSelectPrinter={() => setRoute({
+              name: 'printer',
+              returnTo: { name: 'receipt', saleId: route.saleId },
+            })}
             onNewSale={() => setRoute({ name: 'sell' })}
             onViewHistory={() => setRoute({ name: 'history' })}
             onToast={showToast}
@@ -569,9 +615,21 @@ function PosApp({
             printerDeviceName={printerDeviceName}
             paperWidth={paperWidth}
             autoCut={printerAutoCut}
-            onSelectPrinter={() => setRoute({ name: 'printer' })}
+            onSelectPrinter={() => setRoute({
+              name: 'printer',
+              returnTo: { name: 'saleDetail', saleId: route.saleId },
+            })}
             onBack={() => setRoute({ name: 'history' })}
+            onEdit={() => setRoute({ name: 'saleEdit', saleId: route.saleId })}
             onToast={showToast}
+          />
+        )}
+        {route.name === 'saleEdit' && (
+          <SaleEditScreen
+            saleId={route.saleId}
+            items={items}
+            onBack={() => setRoute({ name: 'saleDetail', saleId: route.saleId })}
+            onSave={(input) => saveSaleEdit(route.saleId, input)}
           />
         )}
         {route.name === 'itemForm' && (
@@ -624,7 +682,7 @@ function PosApp({
         )}
         {route.name === 'printer' && (
           <PrinterScreen
-            onBack={() => setRoute({ name: 'home' })}
+            onBack={() => setRoute(getBackRoute(route) ?? { name: 'home' })}
             printerMode={printerMode}
             printerTarget={printerTarget}
             printerDeviceName={printerDeviceName}
@@ -654,8 +712,13 @@ function PosApp({
         lines={cartLines}
         subtotal={cartSubtotal}
         taxAmount={taxAmount}
+        discountAmount={appliedDiscount}
         total={cartTotal}
-        onSetTax={setTaxAmount}
+        onSetTax={(amount) => {
+          setTaxAmount(amount);
+          setDiscountAmount((current) => Math.min(current, cartSubtotal + amount));
+        }}
+        onSetDiscount={setDiscountAmount}
         onClose={() => setCartOpen(false)}
         onQuantity={changeQuantity}
         onClear={clearCart}

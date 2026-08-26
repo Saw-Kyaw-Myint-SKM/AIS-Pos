@@ -52,6 +52,8 @@ export type Sale = {
   itemCount: number;
   taxAmount: number;
   taxReason: string;
+  discountAmount: number;
+  discountReason: string;
 };
 
 export type SaleItem = {
@@ -160,6 +162,8 @@ export async function initializeDatabase(db: SQLiteDatabase) {
       total REAL NOT NULL,
       tax_amount REAL NOT NULL DEFAULT 0,
       tax_reason TEXT NOT NULL DEFAULT '',
+      discount_amount REAL NOT NULL DEFAULT 0,
+      discount_reason TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS sale_items (
@@ -248,6 +252,12 @@ export async function initializeDatabase(db: SQLiteDatabase) {
   }
   if (!salesColNames.has('tax_reason')) {
     await db.execAsync("ALTER TABLE sales ADD COLUMN tax_reason TEXT NOT NULL DEFAULT ''");
+  }
+  if (!salesColNames.has('discount_amount')) {
+    await db.execAsync('ALTER TABLE sales ADD COLUMN discount_amount REAL NOT NULL DEFAULT 0');
+  }
+  if (!salesColNames.has('discount_reason')) {
+    await db.execAsync("ALTER TABLE sales ADD COLUMN discount_reason TEXT NOT NULL DEFAULT ''");
   }
 
   // Track first-run seeding with PRAGMA user_version so that a re-import of a
@@ -495,20 +505,45 @@ export async function getCategoryItemCounts(db: SQLiteDatabase): Promise<Record<
 
 export const INSUFFICIENT_STOCK_ERROR = 'INSUFFICIENT_STOCK';
 
+export type SaleUpdateLine = {
+  clothingId: number;
+  quantity: number;
+};
+
+export type SaleUpdateInput = {
+  lines: SaleUpdateLine[];
+  taxAmount: number;
+  taxReason: string;
+  discountAmount: number;
+  discountReason: string;
+};
+
+export const SALE_NOT_FOUND_ERROR = 'SALE_NOT_FOUND';
+export const SALE_ITEM_UNAVAILABLE_ERROR = 'SALE_ITEM_UNAVAILABLE';
+export const INVALID_SALE_UPDATE_ERROR = 'INVALID_SALE_UPDATE';
+
 export async function createSale(
   db: SQLiteDatabase,
   items: ClothingItem[],
   quantities: Record<number, number>,
   taxAmount: number = 0,
   taxReason: string = '',
+  discountAmount: number = 0,
+  discountReason: string = '',
 ): Promise<number> {
   const subtotal = items.reduce((sum, item) => sum + item.price * (quantities[item.id] ?? 0), 0);
-  const total = subtotal + taxAmount;
+  if (!Number.isFinite(taxAmount) || taxAmount < 0
+    || !Number.isFinite(discountAmount) || discountAmount < 0
+    || discountAmount > subtotal + taxAmount) {
+    throw new Error(INVALID_SALE_UPDATE_ERROR);
+  }
+  const total = subtotal + taxAmount - discountAmount;
   let saleId = 0;
   await db.withTransactionAsync(async () => {
     const result = await db.runAsync(
-      'INSERT INTO sales (total, tax_amount, tax_reason) VALUES (?, ?, ?)',
-      total, taxAmount, taxReason,
+      `INSERT INTO sales (total, tax_amount, tax_reason, discount_amount, discount_reason)
+       VALUES (?, ?, ?, ?, ?)`,
+      total, taxAmount, taxReason.trim(), discountAmount, discountReason.trim(),
     );
     saleId = result.lastInsertRowId;
     for (const item of items) {
@@ -534,10 +569,116 @@ export async function createSale(
   return saleId;
 }
 
+export async function updateSale(
+  db: SQLiteDatabase,
+  saleId: number,
+  input: SaleUpdateInput,
+): Promise<void> {
+  if (!Number.isSafeInteger(saleId) || saleId <= 0
+    || !Number.isFinite(input.taxAmount) || input.taxAmount < 0
+    || typeof input.taxReason !== 'string'
+    || !Number.isFinite(input.discountAmount) || input.discountAmount < 0
+    || typeof input.discountReason !== 'string' || !input.lines.length) {
+    throw new Error(INVALID_SALE_UPDATE_ERROR);
+  }
+
+  const quantities = new Map<number, number>();
+  for (const line of input.lines) {
+    if (!Number.isSafeInteger(line.clothingId) || line.clothingId <= 0
+      || !Number.isSafeInteger(line.quantity) || line.quantity <= 0) {
+      throw new Error(INVALID_SALE_UPDATE_ERROR);
+    }
+    quantities.set(line.clothingId, (quantities.get(line.clothingId) ?? 0) + line.quantity);
+  }
+
+  await db.withTransactionAsync(async () => {
+    const sale = await db.getFirstAsync<{ id: number }>('SELECT id FROM sales WHERE id = ?', saleId);
+    if (!sale) throw new Error(SALE_NOT_FOUND_ERROR);
+
+    const existingLines = await db.getAllAsync<SaleItem>(
+      `SELECT id, sale_id AS saleId, clothing_id AS clothingId, name, size, price, quantity
+       FROM sale_items WHERE sale_id = ? ORDER BY id`,
+      saleId,
+    );
+    const originalQuantities = new Map<number, number>();
+    const originalSnapshots = new Map<number, SaleItem>();
+    for (const line of existingLines) {
+      originalQuantities.set(line.clothingId, (originalQuantities.get(line.clothingId) ?? 0) + line.quantity);
+      if (!originalSnapshots.has(line.clothingId)) originalSnapshots.set(line.clothingId, line);
+    }
+
+    const affectedIds = new Set([...originalQuantities.keys(), ...quantities.keys()]);
+    const liveItems = new Map<number, Pick<ClothingItem, 'id' | 'name' | 'size' | 'price'>>();
+    for (const itemId of affectedIds) {
+      const item = await db.getFirstAsync<Pick<ClothingItem, 'id' | 'name' | 'size' | 'price'>>(
+        'SELECT id, name, size, price FROM items WHERE id = ?',
+        itemId,
+      );
+      if (!item) throw new Error(SALE_ITEM_UNAVAILABLE_ERROR);
+      liveItems.set(itemId, item);
+    }
+
+    for (const itemId of affectedIds) {
+      const previousQuantity = originalQuantities.get(itemId) ?? 0;
+      const nextQuantity = quantities.get(itemId) ?? 0;
+      const delta = nextQuantity - previousQuantity;
+      if (delta > 0) {
+        const stockUpdate = await db.runAsync(
+          `UPDATE items
+           SET stock = stock - ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND stock >= ?`,
+          delta, itemId, delta,
+        );
+        if (stockUpdate.changes !== 1) throw new Error(INSUFFICIENT_STOCK_ERROR);
+      } else if (delta < 0) {
+        const stockUpdate = await db.runAsync(
+          'UPDATE items SET stock = stock + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+          -delta, itemId,
+        );
+        if (stockUpdate.changes !== 1) throw new Error(SALE_ITEM_UNAVAILABLE_ERROR);
+      }
+    }
+
+    const lines = [...quantities.entries()].map(([clothingId, quantity]) => {
+      const snapshot = originalSnapshots.get(clothingId);
+      const liveItem = liveItems.get(clothingId)!;
+      return {
+        clothingId,
+        quantity,
+        name: snapshot?.name ?? liveItem.name,
+        size: snapshot?.size ?? liveItem.size,
+        price: snapshot?.price ?? liveItem.price,
+      };
+    });
+    const subtotal = lines.reduce((sum, line) => sum + line.price * line.quantity, 0);
+    if (input.discountAmount > subtotal + input.taxAmount) {
+      throw new Error(INVALID_SALE_UPDATE_ERROR);
+    }
+    const total = subtotal + input.taxAmount - input.discountAmount;
+
+    await db.runAsync('DELETE FROM sale_items WHERE sale_id = ?', saleId);
+    for (const line of lines) {
+      await db.runAsync(
+        'INSERT INTO sale_items (sale_id, clothing_id, name, size, price, quantity) VALUES (?, ?, ?, ?, ?, ?)',
+        saleId, line.clothingId, line.name, line.size, line.price, line.quantity,
+      );
+    }
+    await db.runAsync(
+      `UPDATE sales
+       SET total = ?, tax_amount = ?, tax_reason = ?, discount_amount = ?, discount_reason = ?
+       WHERE id = ?`,
+      total, input.taxAmount, input.taxReason.trim(),
+      input.discountAmount, input.discountReason.trim(), saleId,
+    );
+  });
+}
+
 export async function getSales(db: SQLiteDatabase) {
   return db.getAllAsync<Sale>(
     `SELECT sales.id, sales.total, sales.tax_amount AS taxAmount,
             sales.tax_reason AS taxReason,
+            sales.discount_amount AS discountAmount,
+            sales.discount_reason AS discountReason,
             sales.created_at AS createdAt,
       COALESCE(SUM(sale_items.quantity), 0) AS itemCount
      FROM sales LEFT JOIN sale_items ON sale_items.sale_id = sales.id
@@ -549,6 +690,8 @@ export async function getSale(db: SQLiteDatabase, id: number) {
   return db.getFirstAsync<Sale>(
     `SELECT sales.id, sales.total, sales.tax_amount AS taxAmount,
             sales.tax_reason AS taxReason,
+            sales.discount_amount AS discountAmount,
+            sales.discount_reason AS discountReason,
             sales.created_at AS createdAt,
       COALESCE(SUM(sale_items.quantity), 0) AS itemCount
      FROM sales LEFT JOIN sale_items ON sale_items.sale_id = sales.id
