@@ -20,6 +20,32 @@ export type CustomerProfile = {
   updatedAt: string;
 };
 
+export type Customer = {
+  id: number;
+  name: string;
+  phone: string;
+  address: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CustomerInput = Pick<Customer, 'name' | 'phone' | 'address'> & { id?: number };
+export type CreditStatus = 'unpaid' | 'settled';
+
+export type CreditLedgerRow = {
+  id: number;
+  saleId: number;
+  customerId: number;
+  customerName: string;
+  customerPhone: string;
+  total: number;
+  paidAmount: number;
+  balance: number;
+  status: CreditStatus;
+  createdAt: string;
+  settledAt: string | null;
+};
+
 export type Category = {
   id: number;
   name: string;
@@ -35,6 +61,7 @@ export type ClothingItem = {
   name: string;
   size: string;
   price: number;
+  purchaseCost: number;
   categoryId: number | null;
   categoryName: string;
   categoryColor: string;
@@ -63,6 +90,7 @@ export type SaleItem = {
   name: string;
   size: string;
   price: number;
+  costPrice: number;
   quantity: number;
 };
 
@@ -70,6 +98,14 @@ export type TodaySummary = {
   total: number;
   saleCount: number;
   itemCount: number;
+};
+
+export type ProfitSummary = {
+  revenue: number;
+  cost: number;
+  profit: number;
+  profitPercentage: number;
+  saleCount: number;
 };
 
 export type CategoryInput = {
@@ -107,6 +143,7 @@ export async function initializeDatabase(db: SQLiteDatabase) {
   // Without this, expo-sqlite 16 on Android rejects subsequent closeAsync
   // with "unable to close due to unfinalized statements".
   await db.execAsync('PRAGMA journal_mode = WAL;');
+  await db.execAsync('PRAGMA foreign_keys = ON;');
 
   // Rename the legacy inventory table in place before creating the canonical
   // table. ALTER TABLE preserves existing rows, IDs, constraints, and indexes.
@@ -148,6 +185,7 @@ export async function initializeDatabase(db: SQLiteDatabase) {
       name TEXT NOT NULL,
       size TEXT NOT NULL,
       price REAL NOT NULL CHECK (price >= 0),
+      purchase_cost REAL NOT NULL DEFAULT 0 CHECK (purchase_cost >= 0),
       category TEXT NOT NULL DEFAULT '',
       category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
       stock INTEGER NOT NULL DEFAULT 0,
@@ -173,16 +211,38 @@ export async function initializeDatabase(db: SQLiteDatabase) {
       name TEXT NOT NULL,
       size TEXT NOT NULL,
       price REAL NOT NULL,
+      cost_price REAL NOT NULL DEFAULT 0 CHECK (cost_price >= 0),
       quantity INTEGER NOT NULL CHECK (quantity > 0)
     );
     CREATE TABLE IF NOT EXISTS app_settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS customers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      address TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS credit_sales (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sale_id INTEGER NOT NULL UNIQUE REFERENCES sales(id) ON DELETE RESTRICT,
+      customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
+      initial_paid REAL NOT NULL CHECK (initial_paid >= 0),
+      settled_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_credit_sales_customer ON credit_sales(customer_id);
+    CREATE INDEX IF NOT EXISTS idx_credit_sales_status ON credit_sales(settled_at, created_at DESC);
   `);
 
   const cols = await db.getAllAsync<{ name: string; notnull: number }>('PRAGMA table_info(items)');
   const colNames = new Set(cols.map((c) => c.name));
+  if (!colNames.has('purchase_cost')) {
+    await db.execAsync('ALTER TABLE items ADD COLUMN purchase_cost REAL NOT NULL DEFAULT 0 CHECK (purchase_cost >= 0)');
+  }
   if (!colNames.has('category')) {
     await db.execAsync("ALTER TABLE items ADD COLUMN category TEXT NOT NULL DEFAULT ''");
   }
@@ -260,6 +320,12 @@ export async function initializeDatabase(db: SQLiteDatabase) {
     await db.execAsync("ALTER TABLE sales ADD COLUMN discount_reason TEXT NOT NULL DEFAULT ''");
   }
 
+  const saleItemCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(sale_items)');
+  const saleItemColNames = new Set(saleItemCols.map((c) => c.name));
+  if (!saleItemColNames.has('cost_price')) {
+    await db.execAsync('ALTER TABLE sale_items ADD COLUMN cost_price REAL NOT NULL DEFAULT 0 CHECK (cost_price >= 0)');
+  }
+
   // Track first-run seeding with PRAGMA user_version so that a re-import of a
   // backup (possibly containing zero items) does NOT re-seed sample data.
   const versionRow = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -318,29 +384,9 @@ export async function initializeDatabase(db: SQLiteDatabase) {
     });
   }
 
-  // Seed sample items only on a truly fresh database.
+  // Mark fresh initialization as completed. New installs intentionally begin
+  // with no inventory; existing databases are never modified here.
   if (isFresh) {
-    const count = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM items');
-    if (!count?.count) {
-      const seedCats = await db.getAllAsync<{ id: number; name: string }>(
-        `SELECT id, name FROM categories ORDER BY position`,
-      );
-      const seedCategory = (name: string): number | null => {
-        const found = seedCats.find((c) => c.name === name);
-        return found ? found.id : null;
-      };
-      await db.runAsync(
-        `INSERT INTO items (qr_code, name, size, price, category_id) VALUES
-         (?, ?, ?, ?, ?), (?, ?, ?, ?, ?), (?, ?, ?, ?, ?), (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)`,
-        'SHIRT-WHITE-M', 'အင်္ကျီအဖြူ', 'M', 8500, seedCategory('အင်္ကျီ'),
-        'JEANS-BLUE-32', 'ဂျင်းဘောင်းဘီအပြာ', '32', 25000, seedCategory('ဘောင်းဘီ'),
-        'LONGYI-GREEN-FREE', 'လုံချည်အစိမ်း', 'Free', 12000, seedCategory('လုံချည်'),
-        'TSHIRT-BLACK-L', 'တီရှပ်အနက်', 'L', 9000, seedCategory('အင်္ကျီ'),
-        '2000000000017', 'လက်ကိုင်အိတ်အနက်', 'Free', 4500, seedCategory('အခြား'),
-      );
-    }
-
-    // Mark seeding as done so re-imports never re-seed.
     await db.execAsync('PRAGMA user_version = 1');
   }
 
@@ -377,10 +423,67 @@ export async function saveCustomerProfile(
   );
 }
 
+export async function getCustomers(db: SQLiteDatabase) {
+  return db.getAllAsync<Customer>(
+    `SELECT id, name, phone, address, created_at AS createdAt, updated_at AS updatedAt
+     FROM customers ORDER BY name COLLATE NOCASE`,
+  );
+}
+
+export async function getCustomer(db: SQLiteDatabase, id: number) {
+  return db.getFirstAsync<Customer>(
+    `SELECT id, name, phone, address, created_at AS createdAt, updated_at AS updatedAt
+     FROM customers WHERE id = ?`,
+    id,
+  );
+}
+
+function validateCustomerInput(input: CustomerInput) {
+  if (!input.name.trim() || !input.phone.trim() || !input.address.trim()) {
+    throw new Error(INVALID_CUSTOMER_ERROR);
+  }
+}
+
+export async function saveCustomer(db: SQLiteDatabase, input: CustomerInput): Promise<Customer> {
+  validateCustomerInput(input);
+  if (input.id) {
+    await db.runAsync(
+      `UPDATE customers SET name = ?, phone = ?, address = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      input.name.trim(), input.phone.trim(), input.address.trim(), input.id,
+    );
+    const saved = await getCustomer(db, input.id);
+    if (!saved) throw new Error(CUSTOMER_NOT_FOUND_ERROR);
+    return saved;
+  }
+  const result = await db.runAsync(
+    `INSERT INTO customers (name, phone, address) VALUES (?, ?, ?)`,
+    input.name.trim(), input.phone.trim(), input.address.trim(),
+  );
+  const saved = await getCustomer(db, result.lastInsertRowId);
+  if (!saved) throw new Error(CUSTOMER_NOT_FOUND_ERROR);
+  return saved;
+}
+
+export async function deleteCustomer(db: SQLiteDatabase, id: number) {
+  await db.withTransactionAsync(async () => {
+    const result = await db.runAsync(
+      `DELETE FROM customers
+       WHERE id = ?
+         AND NOT EXISTS (SELECT 1 FROM credit_sales WHERE customer_id = ?)`,
+      id, id,
+    );
+    if (result.changes === 1) return;
+    const exists = await db.getFirstAsync<{ id: number }>('SELECT id FROM customers WHERE id = ?', id);
+    if (!exists) throw new Error(CUSTOMER_NOT_FOUND_ERROR);
+    throw new Error(CUSTOMER_HAS_CREDIT_ERROR);
+  });
+}
+
 export async function getClothingItems(db: SQLiteDatabase) {
   return db.getAllAsync<ClothingItem>(
     `SELECT
        c.id, COALESCE(c.qr_code, '') AS qrCode, c.name, c.size, c.price,
+       c.purchase_cost AS purchaseCost,
        c.category_id AS categoryId,
        COALESCE(cat.name, '') AS categoryName,
        COALESCE(cat.color, '') AS categoryColor,
@@ -399,6 +502,7 @@ export async function findClothingByQr(db: SQLiteDatabase, qrCode: string) {
   return db.getFirstAsync<ClothingItem>(
     `SELECT
        c.id, COALESCE(c.qr_code, '') AS qrCode, c.name, c.size, c.price,
+       c.purchase_cost AS purchaseCost,
        c.category_id AS categoryId,
        COALESCE(cat.name, '') AS categoryName,
        COALESCE(cat.color, '') AS categoryColor,
@@ -411,7 +515,7 @@ export async function findClothingByQr(db: SQLiteDatabase, qrCode: string) {
 }
 
 type ClothingItemInput = Omit<
-  Pick<ClothingItem, 'id' | 'qrCode' | 'name' | 'size' | 'price' | 'categoryId' | 'stock' | 'choiceType' | 'colorValue' | 'photoUri' | 'note'>,
+  Pick<ClothingItem, 'id' | 'qrCode' | 'name' | 'size' | 'price' | 'purchaseCost' | 'categoryId' | 'stock' | 'choiceType' | 'colorValue' | 'photoUri' | 'note'>,
   'qrCode'
 > & {
   qrCode: string | null;
@@ -423,13 +527,13 @@ export async function saveClothingItem(
 ) {
   if (item.id) {
     await db.runAsync(
-      `UPDATE items SET qr_code = ?, name = ?, size = ?, price = ?, category_id = ?, stock = ?, choice_type = ?, color_value = ?, photo_uri = ?, note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      item.qrCode, item.name, item.size, item.price, item.categoryId, item.stock, item.choiceType, item.colorValue, item.photoUri, item.note, item.id,
+      `UPDATE items SET qr_code = ?, name = ?, size = ?, price = ?, purchase_cost = ?, category_id = ?, stock = ?, choice_type = ?, color_value = ?, photo_uri = ?, note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      item.qrCode, item.name, item.size, item.price, item.purchaseCost, item.categoryId, item.stock, item.choiceType, item.colorValue, item.photoUri, item.note, item.id,
     );
   } else {
     await db.runAsync(
-      `INSERT INTO items (qr_code, name, size, price, category_id, stock, choice_type, color_value, photo_uri, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      item.qrCode, item.name, item.size, item.price, item.categoryId, item.stock, item.choiceType, item.colorValue, item.photoUri, item.note,
+      `INSERT INTO items (qr_code, name, size, price, purchase_cost, category_id, stock, choice_type, color_value, photo_uri, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      item.qrCode, item.name, item.size, item.price, item.purchaseCost, item.categoryId, item.stock, item.choiceType, item.colorValue, item.photoUri, item.note,
     );
   }
 }
@@ -504,6 +608,13 @@ export async function getCategoryItemCounts(db: SQLiteDatabase): Promise<Record<
 }
 
 export const INSUFFICIENT_STOCK_ERROR = 'INSUFFICIENT_STOCK';
+export const INVALID_CUSTOMER_ERROR = 'INVALID_CUSTOMER';
+export const CUSTOMER_NOT_FOUND_ERROR = 'CUSTOMER_NOT_FOUND';
+export const CUSTOMER_HAS_CREDIT_ERROR = 'CUSTOMER_HAS_CREDIT';
+export const INVALID_CREDIT_PAYMENT_ERROR = 'INVALID_CREDIT_PAYMENT';
+export const CREDIT_NOT_FOUND_ERROR = 'CREDIT_NOT_FOUND';
+export const CREDIT_ALREADY_SETTLED_ERROR = 'CREDIT_ALREADY_SETTLED';
+export const CREDIT_SALE_EDIT_FORBIDDEN_ERROR = 'CREDIT_SALE_EDIT_FORBIDDEN';
 
 export type SaleUpdateLine = {
   clothingId: number;
@@ -561,12 +672,101 @@ export async function createSale(
       }
 
       await db.runAsync(
-        'INSERT INTO sale_items (sale_id, clothing_id, name, size, price, quantity) VALUES (?, ?, ?, ?, ?, ?)',
-        saleId, item.id, item.name, item.size, item.price, quantity,
+        'INSERT INTO sale_items (sale_id, clothing_id, name, size, price, cost_price, quantity) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        saleId, item.id, item.name, item.size, item.price, item.purchaseCost, quantity,
       );
     }
   });
   return saleId;
+}
+
+export async function createCreditSale(
+  db: SQLiteDatabase,
+  customerId: number,
+  items: ClothingItem[],
+  quantities: Record<number, number>,
+  initialPaid: number,
+  taxAmount: number = 0,
+  taxReason: string = '',
+  discountAmount: number = 0,
+  discountReason: string = '',
+): Promise<number> {
+  if (!Number.isSafeInteger(customerId) || customerId <= 0 || !Number.isFinite(initialPaid) || initialPaid < 0) {
+    throw new Error(INVALID_CREDIT_PAYMENT_ERROR);
+  }
+  const subtotal = items.reduce((sum, item) => sum + item.price * (quantities[item.id] ?? 0), 0);
+  if (!Number.isFinite(taxAmount) || taxAmount < 0
+    || !Number.isFinite(discountAmount) || discountAmount < 0
+    || discountAmount > subtotal + taxAmount) {
+    throw new Error(INVALID_SALE_UPDATE_ERROR);
+  }
+  const total = subtotal + taxAmount - discountAmount;
+  if (total <= 0 || initialPaid >= total) throw new Error(INVALID_CREDIT_PAYMENT_ERROR);
+
+  let saleId = 0;
+  await db.withTransactionAsync(async () => {
+    const customer = await db.getFirstAsync<{ id: number }>('SELECT id FROM customers WHERE id = ?', customerId);
+    if (!customer) throw new Error(CUSTOMER_NOT_FOUND_ERROR);
+    const result = await db.runAsync(
+      `INSERT INTO sales (total, tax_amount, tax_reason, discount_amount, discount_reason)
+       VALUES (?, ?, ?, ?, ?)`,
+      total, taxAmount, taxReason.trim(), discountAmount, discountReason.trim(),
+    );
+    saleId = result.lastInsertRowId;
+    for (const item of items) {
+      const quantity = quantities[item.id] ?? 0;
+      if (quantity <= 0) continue;
+      const stockUpdate = await db.runAsync(
+        `UPDATE items SET stock = stock - ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND stock >= ?`,
+        quantity, item.id, quantity,
+      );
+      if (stockUpdate.changes !== 1) throw new Error(INSUFFICIENT_STOCK_ERROR);
+      await db.runAsync(
+        'INSERT INTO sale_items (sale_id, clothing_id, name, size, price, cost_price, quantity) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        saleId, item.id, item.name, item.size, item.price, item.purchaseCost, quantity,
+      );
+    }
+    await db.runAsync(
+      'INSERT INTO credit_sales (sale_id, customer_id, initial_paid) VALUES (?, ?, ?)',
+      saleId, customerId, initialPaid,
+    );
+  });
+  return saleId;
+}
+
+export async function getCreditLedger(db: SQLiteDatabase, status?: CreditStatus) {
+  const statusClause = status === 'unpaid'
+    ? 'AND credit_sales.settled_at IS NULL'
+    : status === 'settled' ? 'AND credit_sales.settled_at IS NOT NULL' : '';
+  return db.getAllAsync<CreditLedgerRow>(
+    `SELECT credit_sales.id, credit_sales.sale_id AS saleId, credit_sales.customer_id AS customerId,
+            customers.name AS customerName, customers.phone AS customerPhone, sales.total,
+            CASE WHEN credit_sales.settled_at IS NULL THEN credit_sales.initial_paid ELSE sales.total END AS paidAmount,
+            CASE WHEN credit_sales.settled_at IS NULL THEN sales.total - credit_sales.initial_paid ELSE 0 END AS balance,
+            CASE WHEN credit_sales.settled_at IS NULL THEN 'unpaid' ELSE 'settled' END AS status,
+            credit_sales.created_at AS createdAt, credit_sales.settled_at AS settledAt
+     FROM credit_sales
+     JOIN customers ON customers.id = credit_sales.customer_id
+     JOIN sales ON sales.id = credit_sales.sale_id
+     WHERE 1 = 1 ${statusClause}
+     ORDER BY credit_sales.created_at DESC`,
+  );
+}
+
+export async function settleCreditSale(db: SQLiteDatabase, creditId: number) {
+  await db.withTransactionAsync(async () => {
+    const credit = await db.getFirstAsync<{ id: number; settledAt: string | null }>(
+      'SELECT id, settled_at AS settledAt FROM credit_sales WHERE id = ?', creditId,
+    );
+    if (!credit) throw new Error(CREDIT_NOT_FOUND_ERROR);
+    if (credit.settledAt) throw new Error(CREDIT_ALREADY_SETTLED_ERROR);
+    const result = await db.runAsync(
+      'UPDATE credit_sales SET settled_at = CURRENT_TIMESTAMP WHERE id = ? AND settled_at IS NULL',
+      creditId,
+    );
+    if (result.changes !== 1) throw new Error(CREDIT_ALREADY_SETTLED_ERROR);
+  });
 }
 
 export async function updateSale(
@@ -592,11 +792,16 @@ export async function updateSale(
   }
 
   await db.withTransactionAsync(async () => {
+    const creditSale = await db.getFirstAsync<{ id: number }>(
+      'SELECT id FROM credit_sales WHERE sale_id = ?',
+      saleId,
+    );
+    if (creditSale) throw new Error(CREDIT_SALE_EDIT_FORBIDDEN_ERROR);
     const sale = await db.getFirstAsync<{ id: number }>('SELECT id FROM sales WHERE id = ?', saleId);
     if (!sale) throw new Error(SALE_NOT_FOUND_ERROR);
 
     const existingLines = await db.getAllAsync<SaleItem>(
-      `SELECT id, sale_id AS saleId, clothing_id AS clothingId, name, size, price, quantity
+      `SELECT id, sale_id AS saleId, clothing_id AS clothingId, name, size, price, cost_price AS costPrice, quantity
        FROM sale_items WHERE sale_id = ? ORDER BY id`,
       saleId,
     );
@@ -608,10 +813,10 @@ export async function updateSale(
     }
 
     const affectedIds = new Set([...originalQuantities.keys(), ...quantities.keys()]);
-    const liveItems = new Map<number, Pick<ClothingItem, 'id' | 'name' | 'size' | 'price'>>();
+    const liveItems = new Map<number, Pick<ClothingItem, 'id' | 'name' | 'size' | 'price' | 'purchaseCost'>>();
     for (const itemId of affectedIds) {
-      const item = await db.getFirstAsync<Pick<ClothingItem, 'id' | 'name' | 'size' | 'price'>>(
-        'SELECT id, name, size, price FROM items WHERE id = ?',
+      const item = await db.getFirstAsync<Pick<ClothingItem, 'id' | 'name' | 'size' | 'price' | 'purchaseCost'>>(
+        'SELECT id, name, size, price, purchase_cost AS purchaseCost FROM items WHERE id = ?',
         itemId,
       );
       if (!item) throw new Error(SALE_ITEM_UNAVAILABLE_ERROR);
@@ -648,6 +853,7 @@ export async function updateSale(
         name: snapshot?.name ?? liveItem.name,
         size: snapshot?.size ?? liveItem.size,
         price: snapshot?.price ?? liveItem.price,
+        costPrice: snapshot?.costPrice ?? liveItem.purchaseCost,
       };
     });
     const subtotal = lines.reduce((sum, line) => sum + line.price * line.quantity, 0);
@@ -659,8 +865,8 @@ export async function updateSale(
     await db.runAsync('DELETE FROM sale_items WHERE sale_id = ?', saleId);
     for (const line of lines) {
       await db.runAsync(
-        'INSERT INTO sale_items (sale_id, clothing_id, name, size, price, quantity) VALUES (?, ?, ?, ?, ?, ?)',
-        saleId, line.clothingId, line.name, line.size, line.price, line.quantity,
+        'INSERT INTO sale_items (sale_id, clothing_id, name, size, price, cost_price, quantity) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        saleId, line.clothingId, line.name, line.size, line.price, line.costPrice, line.quantity,
       );
     }
     await db.runAsync(
@@ -701,9 +907,45 @@ export async function getSale(db: SQLiteDatabase, id: number) {
 
 export async function getSaleItems(db: SQLiteDatabase, saleId: number) {
   return db.getAllAsync<SaleItem>(
-    `SELECT id, sale_id AS saleId, clothing_id AS clothingId, name, size, price, quantity
+    `SELECT id, sale_id AS saleId, clothing_id AS clothingId, name, size, price, cost_price AS costPrice, quantity
      FROM sale_items WHERE sale_id = ? ORDER BY id`, saleId,
   );
+}
+
+function dbTimestamp(date: Date): string {
+  return date.toISOString().slice(0, 19).replace('T', ' ');
+}
+
+export async function getProfitSummary(
+  db: SQLiteDatabase,
+  startInclusive: Date,
+  endExclusive: Date,
+): Promise<ProfitSummary> {
+  const row = await db.getFirstAsync<{ revenue: number; cost: number; saleCount: number }>(
+    `SELECT COALESCE(SUM(sales.total), 0) AS revenue,
+            COALESCE(SUM(line_costs.cost), 0) AS cost,
+            COUNT(sales.id) AS saleCount
+     FROM sales
+     LEFT JOIN (
+       SELECT sale_id, SUM(cost_price * quantity) AS cost
+       FROM sale_items
+       GROUP BY sale_id
+     ) AS line_costs ON line_costs.sale_id = sales.id
+     WHERE sales.created_at >= ? AND sales.created_at < ?`,
+    dbTimestamp(startInclusive), dbTimestamp(endExclusive),
+  );
+  const revenue = row?.revenue ?? 0;
+  const cost = row?.cost ?? 0;
+  const profit = revenue - cost;
+  return { revenue, cost, profit, profitPercentage: revenue > 0 ? (profit / revenue) * 100 : 0, saleCount: row?.saleCount ?? 0 };
+}
+
+export async function clearSalesHistory(db: SQLiteDatabase): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM credit_sales');
+    await db.runAsync('DELETE FROM sale_items');
+    await db.runAsync('DELETE FROM sales');
+  });
 }
 
 export async function getTodaySummary(db: SQLiteDatabase): Promise<TodaySummary> {
@@ -729,6 +971,8 @@ export const SHOP_UNLOCK_CODE = '123456';
 export const SETTING_SHOP_NAME = 'shop_name';
 export const SETTING_SHOP_NAME_UNLOCKED = 'shop_name_unlocked';
 export const SETTING_STOCK_ALERT_LIMIT = 'stock_alert_limit';
+export const SETTING_PROFIT_TRACKING_READY = 'profit_tracking_ready';
+
 export const DEFAULT_STOCK_ALERT_LIMIT = 5;
 
 export const SETTING_PRINTER_TARGET = 'printer_target';

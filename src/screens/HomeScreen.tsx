@@ -34,10 +34,14 @@ type Props = {
   onStartSale: () => void;
   onOpenItems: () => void;
   onOpenHistory: () => void;
+  onOpenProfitReport: () => void;
   onScan: () => void;
   onOpenSettings: () => void;
   onOpenPrinter: () => void;
   onOpenStockAlert: () => void;
+  onOpenCustomers: () => void;
+  onStartCreditSale: () => void;
+  onOpenCreditLedger: () => void;
   stockAlertLimit: number;
 };
 
@@ -57,10 +61,14 @@ export default function HomeScreen({
   onStartSale,
   onOpenItems,
   onOpenHistory,
+  onOpenProfitReport,
   onScan,
   onOpenSettings,
   onOpenPrinter,
   onOpenStockAlert,
+  onOpenCustomers,
+  onStartCreditSale,
+  onOpenCreditLedger,
   stockAlertLimit,
 }: Props) {
   const insets = useSafeAreaInsets();
@@ -78,6 +86,7 @@ export default function HomeScreen({
     { key: 'sale', label: t.home.sale, iconBg: colors.iconIndigo, Icon: DollarIcon, onPress: onStartSale },
     { key: 'products', label: t.home.products, iconBg: colors.iconPurple, Icon: PackageIcon, onPress: onOpenItems },
     { key: 'history', label: t.home.salesHistory, iconBg: colors.iconBlue, Icon: ReceiptIcon, onPress: onOpenHistory },
+    { key: 'profit', label: t.home.profitReport, iconBg: colors.iconGreen, Icon: DollarIcon, onPress: onOpenProfitReport },
     { key: 'scan', label: t.home.scan, iconBg: colors.iconCyan, Icon: ScanIcon, onPress: onScan },
     {
       key: 'stock',
@@ -89,6 +98,12 @@ export default function HomeScreen({
     },
     { key: 'printer', label: t.home.printer, iconBg: colors.iconSlate, Icon: PrinterIcon, onPress: onOpenPrinter },
     { key: 'setting', label: t.home.setting, iconBg: colors.iconSlate, Icon: SettingsIcon, onPress: onOpenSettings },
+  ];
+
+  const creditServices: ServiceTile[] = [
+    { key: 'credit-customers', label: t.credit.customers, iconBg: colors.iconPurple, Icon: PackageIcon, onPress: onOpenCustomers },
+    { key: 'credit-new', label: t.credit.newSale, iconBg: colors.header, Icon: DollarIcon, onPress: onStartCreditSale },
+    { key: 'credit-ledger', label: t.credit.ledger, iconBg: colors.iconBlue, Icon: ReceiptIcon, onPress: onOpenCreditLedger },
   ];
 
   return (
@@ -147,7 +162,7 @@ export default function HomeScreen({
                 style={({ pressed }) => [styles.serviceCard, pressed && styles.pressed]}
               >
                 <View style={[styles.iconBox, { backgroundColor: item.iconBg }]}>
-                  <Icon size={30} color="#FFFFFF" />
+                  <Icon size={24} color="#FFFFFF" />
                   {item.badgeCount != null && item.badgeCount > 0 ? (
                     <View style={styles.badge}>
                       <AppText bold style={styles.badgeText}>
@@ -155,6 +170,30 @@ export default function HomeScreen({
                       </AppText>
                     </View>
                   ) : null}
+                </View>
+                <AppText style={styles.serviceLabel} numberOfLines={2}>
+                  {item.label}
+                </AppText>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <AppText bold style={styles.sectionTitle}>
+          {t.credit.section}
+        </AppText>
+        <View style={styles.grid}>
+          {creditServices.map((item) => {
+            const Icon = item.Icon;
+            return (
+              <Pressable
+                key={item.key}
+                accessibilityRole="button"
+                onPress={item.onPress}
+                style={({ pressed }) => [styles.serviceCard, pressed && styles.pressed]}
+              >
+                <View style={[styles.iconBox, { backgroundColor: item.iconBg }]}>
+                  <Icon size={24} color="#FFFFFF" />
                 </View>
                 <AppText style={styles.serviceLabel} numberOfLines={2}>
                   {item.label}
@@ -278,30 +317,30 @@ const styles = StyleSheet.create({
   serviceCard: {
     width: COL,
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#EAEAEA',
-    paddingTop: 16,
-    paddingBottom: 14,
-    paddingHorizontal: 8,
+    paddingTop: 10,
+    paddingBottom: 9,
+    paddingHorizontal: 6,
     alignItems: 'center',
     ...tileShadow,
   },
   pressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
   iconBox: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 6,
   },
   serviceLabel: {
     color: '#374151',
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: font.regular,
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 14,
   },
   badge: {
     position: 'absolute',

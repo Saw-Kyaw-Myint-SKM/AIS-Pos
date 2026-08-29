@@ -4,7 +4,7 @@ import {
   type SaleItem,
 } from '../src/db';
 
-type Item = { id: number; name: string; size: string; price: number; stock: number };
+type Item = { id: number; name: string; size: string; price: number; purchaseCost: number; stock: number };
 type Sale = {
   id: number;
   total: number;
@@ -27,11 +27,11 @@ type FakeDb = {
 function createDb(): FakeDb {
   const db: FakeDb = {
     items: [
-      { id: 1, name: 'Old shirt', size: 'M', price: 999, stock: 5 },
-      { id: 2, name: 'New longyi', size: 'L', price: 300, stock: 4 },
+      { id: 1, name: 'Old shirt', size: 'M', price: 999, purchaseCost: 45, stock: 5 },
+      { id: 2, name: 'New longyi', size: 'L', price: 300, purchaseCost: 125, stock: 4 },
     ],
     sales: [{ id: 1, total: 200, taxAmount: 0, taxReason: '', discountAmount: 0, discountReason: '' }],
-    saleItems: [{ id: 1, saleId: 1, clothingId: 1, name: 'Original shirt', size: 'S', price: 100, quantity: 2 }],
+    saleItems: [{ id: 1, saleId: 1, clothingId: 1, name: 'Original shirt', size: 'S', price: 100, costPrice: 40, quantity: 2 }],
     runAsync: async () => ({ lastInsertRowId: 0, changes: 0 }),
     getFirstAsync: async () => null,
     getAllAsync: async () => [],
@@ -68,8 +68,8 @@ function createDb(): FakeDb {
       return { lastInsertRowId: 0, changes: 1 };
     }
     if (normalized.startsWith('INSERT INTO SALE_ITEMS')) {
-      const [saleId, clothingId, name, size, price, quantity] = params as [number, number, string, string, number, number];
-      db.saleItems.push({ id: db.saleItems.length + 1, saleId, clothingId, name, size, price, quantity });
+      const [saleId, clothingId, name, size, price, costPrice, quantity] = params as [number, number, string, string, number, number, number];
+      db.saleItems.push({ id: db.saleItems.length + 1, saleId, clothingId, name, size, price, costPrice, quantity });
       return { lastInsertRowId: db.saleItems.length, changes: 1 };
     }
     if (normalized.startsWith('UPDATE SALES')) {
@@ -112,8 +112,8 @@ describe('updateSale', () => {
     expect(db.items.map(({ id, stock }) => ({ id, stock }))).toEqual([{ id: 1, stock: 6 }, { id: 2, stock: 2 }]);
     expect(db.sales[0]).toEqual({ id: 1, total: 725, taxAmount: 50, taxReason: 'အခွန်', discountAmount: 25, discountReason: 'လျော့စျေး' });
     expect(db.saleItems).toEqual([
-      expect.objectContaining({ clothingId: 1, name: 'Original shirt', size: 'S', price: 100, quantity: 1 }),
-      expect.objectContaining({ clothingId: 2, name: 'New longyi', size: 'L', price: 300, quantity: 2 }),
+      expect.objectContaining({ clothingId: 1, name: 'Original shirt', size: 'S', price: 100, costPrice: 40, quantity: 1 }),
+      expect.objectContaining({ clothingId: 2, name: 'New longyi', size: 'L', price: 300, costPrice: 125, quantity: 2 }),
     ]);
   });
 

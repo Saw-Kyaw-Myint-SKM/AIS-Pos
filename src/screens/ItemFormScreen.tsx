@@ -19,6 +19,7 @@ export type ItemFormValue = {
   name: string;
   size: string;
   price: string;
+  purchaseCost: string;
   categoryId: number | null;
   stock: string;
   choiceType: 'color' | 'photo';
@@ -34,6 +35,7 @@ export function itemToForm(item: ClothingItem): ItemFormValue {
     name: item.name,
     size: item.size,
     price: String(item.price),
+    purchaseCost: String(item.purchaseCost),
     categoryId: item.categoryId,
     stock: String(item.stock),
     choiceType: item.choiceType,
@@ -49,6 +51,7 @@ export const emptyForm: ItemFormValue = {
   name: '',
   size: '',
   price: '',
+  purchaseCost: '',
   categoryId: null,
   stock: '',
   choiceType: 'color',
@@ -304,6 +307,18 @@ export default function ItemFormScreen({ initial, categories, onBack, onSave, on
           <TextInput
             value={form.price}
             onChangeText={(v) => set('price', v)}
+            placeholder="0"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="numeric"
+            style={styles.input}
+          />
+        </View>
+
+        <View style={styles.field}>
+          <AppText style={styles.label}>{requiredLabel(t.items.purchaseCost)}</AppText>
+          <TextInput
+            value={form.purchaseCost}
+            onChangeText={(v) => set('purchaseCost', v)}
             placeholder="0"
             placeholderTextColor="#9CA3AF"
             keyboardType="numeric"
