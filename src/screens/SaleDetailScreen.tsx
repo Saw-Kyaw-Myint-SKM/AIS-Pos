@@ -16,6 +16,7 @@ type Props = {
   onSelectPrinter: () => void;
   onBack: () => void;
   onEdit: () => void;
+  editable?: boolean;
   onToast: (message: string) => void;
 };
 
@@ -26,6 +27,7 @@ export default function SaleDetailScreen({
   onSelectPrinter,
   onBack,
   onEdit,
+  editable = true,
   onToast,
 }: Props) {
   const db = useSQLiteContext();
@@ -62,14 +64,16 @@ export default function SaleDetailScreen({
           <BackArrowIcon size={26} color="#FFFFFF" />
         </Pressable>
         <AppText bold style={styles.title}>{t.receipt.title}</AppText>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t.saleEdit.edit}
-          onPress={onEdit}
-          style={({ pressed }) => [styles.headerEditBtn, pressed && { opacity: 0.7 }]}
-        >
-          <AppText bold style={styles.headerEditText}>{t.saleEdit.edit}</AppText>
-        </Pressable>
+        {editable ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t.saleEdit.edit}
+            onPress={onEdit}
+            style={({ pressed }) => [styles.headerEditBtn, pressed && { opacity: 0.7 }]}
+          >
+            <AppText bold style={styles.headerEditText}>{t.saleEdit.edit}</AppText>
+          </Pressable>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t.printer.print}

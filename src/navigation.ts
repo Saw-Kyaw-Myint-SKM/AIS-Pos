@@ -9,14 +9,21 @@ export type Route =
   | { name: 'sell' }
   | { name: 'clothes' }
   | { name: 'history' }
+  | { name: 'profitReport' }
   | { name: 'receipt'; saleId: number }
   | { name: 'saleDetail'; saleId: number }
   | { name: 'saleEdit'; saleId: number }
   | { name: 'itemForm'; itemId?: number }
   | { name: 'categoryForm'; categoryId?: number }
   | { name: 'settings' }
+  | { name: 'about' }
   | { name: 'printer'; returnTo?: PrinterReturnRoute }
-  | { name: 'stockAlert' };
+  | { name: 'stockAlert' }
+  | { name: 'customers' }
+  | { name: 'customerForm'; customerId?: number; returnTo?: 'customers' | 'creditCheckout' }
+  | { name: 'creditSell' }
+  | { name: 'creditCheckout' }
+  | { name: 'creditLedger' };
 
 /**
  * Returns the manual-router destination for Android's hardware Back action.
@@ -31,9 +38,19 @@ export function getBackRoute(route: Route): Route | null {
     case 'sell':
     case 'clothes':
     case 'history':
+    case 'profitReport':
     case 'settings':
     case 'stockAlert':
+    case 'customers':
+    case 'creditSell':
+    case 'creditLedger':
       return { name: 'home' };
+    case 'about':
+      return { name: 'settings' };
+    case 'creditCheckout':
+      return { name: 'creditSell' };
+    case 'customerForm':
+      return route.returnTo === 'creditCheckout' ? { name: 'creditCheckout' } : { name: 'customers' };
     case 'receipt':
       return { name: 'sell' };
     case 'saleDetail':

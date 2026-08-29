@@ -5,8 +5,12 @@ describe('getBackRoute', () => {
     { name: 'sell' },
     { name: 'clothes' },
     { name: 'history' },
+    { name: 'profitReport' },
     { name: 'settings' },
     { name: 'stockAlert' },
+    { name: 'customers' },
+    { name: 'creditSell' },
+    { name: 'creditLedger' },
   ])('returns Home from %s.name', (route) => {
     expect(getBackRoute(route)).toEqual({ name: 'home' });
   });
@@ -19,6 +23,11 @@ describe('getBackRoute', () => {
     [{ name: 'itemForm', itemId: 7 }, { name: 'clothes' }],
     [{ name: 'categoryForm' }, { name: 'clothes' }],
     [{ name: 'categoryForm', categoryId: 7 }, { name: 'clothes' }],
+    [{ name: 'customerForm' }, { name: 'customers' }],
+    [{ name: 'customerForm', customerId: 7 }, { name: 'customers' }],
+    [{ name: 'customerForm', returnTo: 'creditCheckout' }, { name: 'creditCheckout' }],
+    [{ name: 'creditCheckout' }, { name: 'creditSell' }],
+    [{ name: 'about' }, { name: 'settings' }],
   ])('returns the immediate parent from $0.name', (route, expected) => {
     expect(getBackRoute(route)).toEqual(expected);
   });

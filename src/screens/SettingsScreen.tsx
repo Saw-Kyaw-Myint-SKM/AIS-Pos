@@ -29,6 +29,7 @@ type Props = {
   onExport: () => Promise<void>;
   onExportToDownloads: () => Promise<void>;
   onImport: () => void;
+  onOpenAbout: () => void;
   busy?: boolean;
   shopName: string;
   shopUnlocked: boolean;
@@ -79,6 +80,7 @@ export default function SettingsScreen({
   onExport,
   onExportToDownloads,
   onImport,
+  onOpenAbout,
   busy,
   shopName,
   shopUnlocked,
@@ -206,6 +208,19 @@ export default function SettingsScreen({
             hint={t.settings.loadHint}
             onPress={onImport}
             disabled={busy}
+          />
+        </View>
+
+        <AppText style={styles.sectionLabel}>{t.settings.aboutSection}</AppText>
+
+        <View style={styles.group}>
+          <OptionRow
+            icon={StoreIcon}
+            iconBg="#EEF0FF"
+            iconColor="#4A6CF7"
+            label={t.settings.about}
+            hint={t.settings.aboutHint}
+            onPress={onOpenAbout}
           />
         </View>
 

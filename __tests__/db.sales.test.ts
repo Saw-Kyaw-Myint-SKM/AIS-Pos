@@ -13,7 +13,7 @@ type FakeSale = {
   discountAmount: number;
   discountReason: string;
 };
-type FakeSaleItem = { saleId: number; clothingId: number; quantity: number };
+type FakeSaleItem = { saleId: number; clothingId: number; costPrice: number; quantity: number };
 
 type FakeDb = {
   items: FakeItem[];
@@ -50,8 +50,8 @@ function createFakeDb(items: FakeItem[]): FakeDb {
       return { lastInsertRowId: 0, changes: 1 };
     }
     if (normalized.startsWith('INSERT INTO SALE_ITEMS')) {
-      const [saleId, clothingId,,,, quantity] = params as [number, number, string, string, number, number];
-      db.saleItems.push({ saleId, clothingId, quantity });
+      const [saleId, clothingId,,,, costPrice, quantity] = params as [number, number, string, string, number, number, number];
+      db.saleItems.push({ saleId, clothingId, costPrice, quantity });
       return { lastInsertRowId: db.saleItems.length, changes: 1 };
     }
     throw new Error(`Unhandled SQL: ${sql}`);
@@ -83,6 +83,7 @@ function item(id: number, stock: number, price = 1000): ClothingItem {
     name: `Item ${id}`,
     size: 'M',
     price,
+    purchaseCost: 400,
     categoryId: null,
     categoryName: '',
     categoryColor: '',
@@ -102,7 +103,7 @@ describe('createSale stock handling', () => {
     expect(saleId).toBe(1);
     expect(db.items[0].stock).toBe(3);
     expect(db.sales).toEqual([{ id: 1, total: 2050, taxAmount: 100, taxReason: 'အခွန်', discountAmount: 50, discountReason: 'လျော့စျေး' }]);
-    expect(db.saleItems).toEqual([{ saleId: 1, clothingId: 1, quantity: 2 }]);
+    expect(db.saleItems).toEqual([{ saleId: 1, clothingId: 1, costPrice: 400, quantity: 2 }]);
   });
 
   test('rolls back all sale and stock changes when an item is short of stock', async () => {

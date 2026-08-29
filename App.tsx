@@ -9,20 +9,21 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AppText from './src/components/AppText';
 import CartSheet, { type CartLine } from './src/components/CartSheet';
 import {
-  createSale, deleteCategory, deleteClothingItem, DEFAULT_PAPER_WIDTH, DEFAULT_SHOP_NAME, exportDatabaseFile, exportDatabaseToDownloads,
-  INSUFFICIENT_STOCK_ERROR, SALE_ITEM_UNAVAILABLE_ERROR,
-  updateSale,
+  createCreditSale, createSale, clearSalesHistory, deleteCategory, deleteClothingItem, deleteCustomer, DEFAULT_PAPER_WIDTH, DEFAULT_SHOP_NAME, exportDatabaseFile, exportDatabaseToDownloads,
+  CUSTOMER_HAS_CREDIT_ERROR, INSUFFICIENT_STOCK_ERROR, SALE_ITEM_UNAVAILABLE_ERROR,
+  updateSale, settleCreditSale,
   findClothingByQr,
-  getAppSetting, getCategories, getClothingItems, getCustomerProfile, getSales, getTodaySummary,
+  getAppSetting, getCategories, getClothingItems, getCreditLedger, getCustomerProfile, getCustomers, getProfitSummary, getSales, getTodaySummary,
   importDatabaseFile, initializeDatabase,
-  reorderCategories, saveCategory, saveClothingItem,
+  reorderCategories, saveCategory, saveClothingItem, saveCustomer,
   DEFAULT_STOCK_ALERT_LIMIT, SETTING_PRINTER_PAPER_WIDTH,
-  SETTING_SHOP_NAME, SETTING_SHOP_NAME_UNLOCKED, SETTING_STOCK_ALERT_LIMIT, setAppSetting,
-  type Category, type ClothingItem, type CustomerProfile, type PaperWidth, type Sale, type SaleUpdateInput, type TodaySummary,
+  SETTING_SHOP_NAME, SETTING_SHOP_NAME_UNLOCKED, SETTING_STOCK_ALERT_LIMIT, SETTING_PROFIT_TRACKING_READY, setAppSetting,
+  type Category, type ClothingItem, type CreditLedgerRow, type Customer, type CustomerInput, type CustomerProfile, type PaperWidth, type ProfitSummary, type Sale, type SaleUpdateInput, type TodaySummary,
 } from './src/db';
 import { scanFormatLabel, t } from './src/i18n';
 import { getBackRoute, type Route } from './src/navigation';
 import HistoryScreen from './src/screens/HistoryScreen';
+import ProfitReportScreen from './src/screens/ProfitReportScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import ItemFormScreen, { emptyForm, itemToForm } from './src/screens/ItemFormScreen';
 import type { ItemFormValue } from './src/screens/ItemFormScreen';
@@ -37,7 +38,12 @@ import SaleEditScreen from './src/screens/SaleEditScreen';
 import ScannerModal from './src/screens/ScannerModal';
 import SellScreen from './src/screens/SellScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import AboutScreen from './src/screens/AboutScreen';
 import StockAlertScreen from './src/screens/StockAlertScreen';
+import CustomersScreen from './src/screens/CustomersScreen';
+import CustomerFormScreen from './src/screens/CustomerFormScreen';
+import CreditCheckoutScreen from './src/screens/CreditCheckoutScreen';
+import CreditLedgerScreen from './src/screens/CreditLedgerScreen';
 import TabBar from './src/components/TabBar';
 import { colors } from './src/theme';
 
@@ -87,6 +93,8 @@ function PosApp({
   const [items, setItems] = useState<ClothingItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [creditLedger, setCreditLedger] = useState<CreditLedgerRow[]>([]);
   const [today, setToday] = useState<TodaySummary>({ total: 0, saleCount: 0, itemCount: 0 });
   const [cart, setCart] = useState<Record<number, number>>({});
   const [taxAmount, setTaxAmount] = useState(0);
@@ -101,6 +109,7 @@ function PosApp({
   const [shopUnlocked, setShopUnlocked] = useState(false);
   const [paperWidth, setPaperWidthState] = useState<PaperWidth>(DEFAULT_PAPER_WIDTH);
   const [stockAlertLimit, setStockAlertLimit] = useState(DEFAULT_STOCK_ALERT_LIMIT);
+  const [profitTrackingReady, setProfitTrackingReady] = useState(false);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -137,6 +146,7 @@ function PosApp({
       const unlocked = await getAppSetting(db, SETTING_SHOP_NAME_UNLOCKED);
       const pWidth = await getAppSetting(db, SETTING_PRINTER_PAPER_WIDTH);
       const savedStockAlertLimit = await getAppSetting(db, SETTING_STOCK_ALERT_LIMIT);
+      const profitReady = await getAppSetting(db, SETTING_PROFIT_TRACKING_READY);
       const parsedStockAlertLimit = Number(savedStockAlertLimit);
       const nextStockAlertLimit = Number.isSafeInteger(parsedStockAlertLimit) && parsedStockAlertLimit >= 0
         ? parsedStockAlertLimit
@@ -147,6 +157,7 @@ function PosApp({
       setShopUnlocked(unlocked === '1');
       setPaperWidthState((pWidth === '80' ? '80' : '58') as PaperWidth);
       setStockAlertLimit(nextStockAlertLimit);
+      setProfitTrackingReady(profitReady === '1');
       setRoute(existing ? { name: 'home' } : { name: 'register' });
       setBooted(true);
     })();
@@ -184,16 +195,55 @@ function PosApp({
   }, [db]);
 
   const refreshAll = useCallback(async () => {
-    const [itemRows, categoryRows, saleRows, summary] = await Promise.all([
-      getClothingItems(db), getCategories(db), getSales(db), getTodaySummary(db),
+    const [itemRows, categoryRows, saleRows, customerRows, ledgerRows, summary] = await Promise.all([
+      getClothingItems(db), getCategories(db), getSales(db), getCustomers(db), getCreditLedger(db), getTodaySummary(db),
     ]);
     setItems(itemRows);
     setCategories(categoryRows);
     setSales(saleRows);
+    setCustomers(customerRows);
+    setCreditLedger(ledgerRows);
     setToday(summary);
   }, [db]);
 
   useEffect(() => { refreshAll(); }, [refreshAll]);
+
+  const openProfitReport = useCallback(() => {
+    const proceed = async () => {
+      try {
+        await clearSalesHistory(db);
+        await setAppSetting(db, SETTING_PROFIT_TRACKING_READY, '1');
+        setProfitTrackingReady(true);
+        await refreshAll();
+        setRoute({ name: 'profitReport' });
+      } catch {
+        Alert.alert(t.profit.resetError);
+      }
+    };
+
+    if (profitTrackingReady) {
+      setRoute({ name: 'profitReport' });
+    } else if (!sales.length) {
+      void (async () => {
+        try {
+          await setAppSetting(db, SETTING_PROFIT_TRACKING_READY, '1');
+          setProfitTrackingReady(true);
+          setRoute({ name: 'profitReport' });
+        } catch {
+          Alert.alert(t.profit.resetError);
+        }
+      })();
+    } else {
+      Alert.alert(t.profit.resetTitle, t.profit.resetBody, [
+        { text: t.profit.cancel, style: 'cancel' },
+        { text: t.profit.resetConfirm, style: 'destructive', onPress: () => { void proceed(); } },
+      ]);
+    }
+  }, [db, profitTrackingReady, refreshAll, sales.length]);
+
+  const loadProfitSummary = useCallback((startInclusive: Date, endExclusive: Date): Promise<ProfitSummary> => (
+    getProfitSummary(db, startInclusive, endExclusive)
+  ), [db]);
 
   const cartLines: CartLine[] = items
     .filter((item) => cart[item.id])
@@ -247,7 +297,7 @@ function PosApp({
     changeQuantity(item.id, 1);
     setLastScannedItem(item);
     showToast(`${t.toast.added} (${scanFormatLabel(format)})`);
-    if (route.name !== 'sell' && !keepOpen) setRoute({ name: 'sell' });
+    if (route.name !== 'sell' && route.name !== 'creditSell' && !keepOpen) setRoute({ name: 'sell' });
   }, [db, cart, changeQuantity, showToast, route.name]);
 
   const confirmSale = useCallback(async () => {
@@ -275,6 +325,60 @@ function PosApp({
       await refreshAll();
     }
   }, [db, cartLines, cart, taxAmount, appliedDiscount, refreshAll, showToast]);
+
+  const saveCustomerHandler = useCallback(async (input: CustomerInput) => {
+    try {
+      await saveCustomer(db, input);
+      await refreshAll();
+      showToast(t.toast.saved);
+      const returnToCredit = route.name === 'customerForm' && route.returnTo === 'creditCheckout';
+      setRoute(returnToCredit ? { name: 'creditCheckout' } : { name: 'customers' });
+    } catch {
+      Alert.alert(t.customer.required);
+    }
+  }, [db, refreshAll, route, showToast]);
+
+  const deleteCustomerHandler = useCallback(async (customer: Customer) => {
+    try {
+      await deleteCustomer(db, customer.id);
+      await refreshAll();
+      showToast(t.toast.deleted);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      Alert.alert(message === CUSTOMER_HAS_CREDIT_ERROR ? t.customer.linkedCannotDelete : t.customer.required);
+    }
+  }, [db, refreshAll, showToast]);
+
+  const confirmCreditSale = useCallback(async (customerId: number, initialPaid: number) => {
+    if (!cartLines.length) return;
+    try {
+      const saleId = await createCreditSale(
+        db, customerId, cartLines.map((line) => line.item), cart, initialPaid,
+        taxAmount, 'အခွန်', appliedDiscount, 'လျော့စျေး',
+      );
+      setCart({});
+      setTaxAmount(0);
+      setDiscountAmount(0);
+      setLastScannedItem(null);
+      await refreshAll();
+      showToast(t.credit.saved);
+      setRoute({ name: 'receipt', saleId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      Alert.alert(message === INSUFFICIENT_STOCK_ERROR ? t.cart.stockUnavailable : t.credit.createError);
+      await refreshAll();
+    }
+  }, [appliedDiscount, cart, cartLines, db, refreshAll, showToast, taxAmount]);
+
+  const settleCreditHandler = useCallback(async (credit: CreditLedgerRow) => {
+    try {
+      await settleCreditSale(db, credit.id);
+      await refreshAll();
+      showToast(t.credit.settledSuccess);
+    } catch {
+      Alert.alert(t.credit.settleError);
+    }
+  }, [db, refreshAll, showToast]);
 
   const saveSaleEdit = useCallback((saleId: number, input: SaleUpdateInput) => {
     Alert.alert(t.saleEdit.confirmTitle, t.saleEdit.confirmBody, [
@@ -380,8 +484,10 @@ function PosApp({
 
   const saveItem = useCallback(async (form: ItemFormValue) => {
     const price = Number(form.price);
+    const purchaseCost = Number(form.purchaseCost);
     const stock = Number(form.stock) || 0;
-    if (!form.name.trim() || !form.categoryId || !Number.isFinite(price) || price < 0) {
+    if (!form.name.trim() || !form.categoryId || !Number.isFinite(price) || price < 0
+      || !Number.isFinite(purchaseCost) || purchaseCost < 0) {
       Alert.alert(t.items.invalidTitle, t.items.invalidBody);
       return;
     }
@@ -392,6 +498,7 @@ function PosApp({
         size: form.size.trim(),
         qrCode: form.qrCode.trim(),
         price,
+        purchaseCost,
         categoryId: form.categoryId,
         stock,
         choiceType: form.choiceType,
@@ -499,10 +606,14 @@ function PosApp({
             onStartSale={() => setRoute({ name: 'sell' })}
             onOpenItems={() => setRoute({ name: 'clothes' })}
             onOpenHistory={() => setRoute({ name: 'history' })}
+            onOpenProfitReport={openProfitReport}
             onScan={() => setScannerOpen(true)}
             onOpenSettings={() => setRoute({ name: 'settings' })}
             onOpenPrinter={() => setRoute({ name: 'printer', returnTo: { name: 'home' } })}
             onOpenStockAlert={() => setRoute({ name: 'stockAlert' })}
+            onOpenCustomers={() => setRoute({ name: 'customers' })}
+            onStartCreditSale={() => setRoute({ name: 'creditSell' })}
+            onOpenCreditLedger={() => setRoute({ name: 'creditLedger' })}
             stockAlertLimit={stockAlertLimit}
           />
         )}
@@ -518,6 +629,48 @@ function PosApp({
             onScan={() => setScannerOpen(true)}
             onBack={() => setRoute({ name: 'home' })}
           />
+        )}
+        {route.name === 'creditSell' && (
+          <SellScreen
+            items={items}
+            categories={categories}
+            cart={cart}
+            cartCount={cartCount}
+            cartTotal={cartTotal}
+            onChangeQty={setItemQty}
+            onOpenCart={() => setCartOpen(true)}
+            onScan={() => setScannerOpen(true)}
+            onBack={() => setRoute({ name: 'home' })}
+          />
+        )}
+        {route.name === 'creditCheckout' && (
+          <CreditCheckoutScreen
+            lines={cartLines}
+            total={cartTotal}
+            customers={customers}
+            onBack={() => setRoute({ name: 'creditSell' })}
+            onCreateCustomer={() => setRoute({ name: 'customerForm', returnTo: 'creditCheckout' })}
+            onConfirm={confirmCreditSale}
+          />
+        )}
+        {route.name === 'customers' && (
+          <CustomersScreen
+            customers={customers}
+            onBack={() => setRoute({ name: 'home' })}
+            onCreate={() => setRoute({ name: 'customerForm' })}
+            onEdit={(customer) => setRoute({ name: 'customerForm', customerId: customer.id })}
+            onDelete={deleteCustomerHandler}
+          />
+        )}
+        {route.name === 'customerForm' && (
+          <CustomerFormScreen
+            initial={route.customerId ? customers.find((customer) => customer.id === route.customerId) : undefined}
+            onBack={() => setRoute(route.returnTo === 'creditCheckout' ? { name: 'creditCheckout' } : { name: 'customers' })}
+            onSave={saveCustomerHandler}
+          />
+        )}
+        {route.name === 'creditLedger' && (
+          <CreditLedgerScreen ledger={creditLedger} onBack={() => setRoute({ name: 'home' })} onSettle={settleCreditHandler} />
         )}
         {route.name === 'clothes' && (
           <View style={{ flex: 1, paddingBottom: 90 }}>
@@ -543,6 +696,9 @@ function PosApp({
             />
           </View>
         )}
+        {route.name === 'profitReport' && (
+          <ProfitReportScreen onBack={() => setRoute({ name: 'home' })} onLoad={loadProfitSummary} />
+        )}
         {route.name === 'receipt' && (
           <ReceiptScreen
             saleId={route.saleId}
@@ -567,6 +723,7 @@ function PosApp({
               returnTo: { name: 'saleDetail', saleId: route.saleId },
             })}
             onBack={() => setRoute({ name: 'history' })}
+            editable={!creditLedger.some((credit) => credit.saleId === route.saleId)}
             onEdit={() => setRoute({ name: 'saleEdit', saleId: route.saleId })}
             onToast={showToast}
           />
@@ -620,12 +777,16 @@ function PosApp({
             onExport={handleExportDatabase}
             onExportToDownloads={handleExportToDownloads}
             onImport={handleImportDatabase}
+            onOpenAbout={() => setRoute({ name: 'about' })}
             busy={settingsBusy}
             shopName={shopName}
             shopUnlocked={shopUnlocked}
             onUnlockShopName={unlockShopName}
             onSaveShopName={saveShopName}
           />
+        )}
+        {route.name === 'about' && (
+          <AboutScreen onBack={() => setRoute({ name: 'settings' })} />
         )}
         {route.name === 'printer' && (
           <PrinterScreen
@@ -664,7 +825,14 @@ function PosApp({
         onClose={() => setCartOpen(false)}
         onQuantity={changeQuantity}
         onClear={clearCart}
-        onConfirm={confirmSale}
+        onConfirm={() => {
+          if (route.name === 'creditSell') {
+            setCartOpen(false);
+            setRoute({ name: 'creditCheckout' });
+          } else {
+            confirmSale();
+          }
+        }}
       />
 
       <ScannerModal
