@@ -922,16 +922,14 @@ export async function getProfitSummary(
   endExclusive: Date,
 ): Promise<ProfitSummary> {
   const row = await db.getFirstAsync<{ revenue: number; cost: number; saleCount: number }>(
-    `SELECT COALESCE(SUM(sales.total), 0) AS revenue,
-            COALESCE(SUM(line_costs.cost), 0) AS cost,
-            COUNT(sales.id) AS saleCount
-     FROM sales
-     LEFT JOIN (
-       SELECT sale_id, SUM(cost_price * quantity) AS cost
-       FROM sale_items
-       GROUP BY sale_id
-     ) AS line_costs ON line_costs.sale_id = sales.id
-     WHERE sales.created_at >= ? AND sales.created_at < ?`,
+    `SELECT COALESCE(SUM(sale_items.price * sale_items.quantity), 0) AS revenue,
+            COALESCE(SUM(sale_items.cost_price * sale_items.quantity), 0) AS cost,
+            COUNT(DISTINCT sale_items.sale_id) AS saleCount
+     FROM sale_items
+     JOIN sales ON sales.id = sale_items.sale_id
+     WHERE sales.created_at >= ?
+       AND sales.created_at < ?
+       AND sale_items.cost_price > 0`,
     dbTimestamp(startInclusive), dbTimestamp(endExclusive),
   );
   const revenue = row?.revenue ?? 0;
