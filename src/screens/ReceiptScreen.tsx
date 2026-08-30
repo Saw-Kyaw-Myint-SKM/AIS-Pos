@@ -1,7 +1,7 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { getSale, getSaleItems, type PaperWidth } from '../db';
+import { getSale, getSaleItems, type PaperWidth, type PrinterMode } from '../db';
 import { t } from '../i18n';
 import { exportReceiptPdf } from '../receiptHtml';
 import { colors, radius } from '../theme';
@@ -13,7 +13,11 @@ import { PrinterIcon } from '../components/ServiceIcon';
 type Props = {
   saleId: number;
   shopName: string;
+  printerMode: PrinterMode;
+  printerTarget: string;
+  printerDeviceName: string;
   paperWidth: PaperWidth;
+  autoCut: boolean;
   onSelectPrinter: () => void;
   onNewSale: () => void;
   onViewHistory: () => void;
@@ -23,7 +27,11 @@ type Props = {
 export default function ReceiptScreen({
   saleId,
   shopName,
+  printerMode,
+  printerTarget,
+  printerDeviceName,
   paperWidth,
+  autoCut,
   onSelectPrinter,
   onNewSale,
   onViewHistory,
@@ -48,6 +56,11 @@ export default function ReceiptScreen({
   };
 
   const handlePrint = () => {
+    if (!printerTarget) {
+      onToast(t.printer.notSelected);
+      onSelectPrinter();
+      return;
+    }
     setPrintOpen(true);
   };
 
@@ -61,32 +74,28 @@ export default function ReceiptScreen({
         <Receipt saleId={saleId} shopName={shopName} />
       </ScrollView>
       <View style={styles.footer}>
-        <View style={styles.btnRow}>
-          <Pressable accessibilityRole="button" onPress={onNewSale} style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.85 }]}>
-            <AppText bold style={styles.primaryText}>{t.receipt.newSale}</AppText>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            onPress={handlePrint}
-            style={({ pressed }) => [styles.printBtn, pressed && { opacity: 0.8 }]}
-          >
-            <PrinterIcon size={16} color="#FFFFFF" />
-            <AppText bold style={styles.printText}>{t.printer.print}</AppText>
-          </Pressable>
-        </View>
-        <View style={styles.btnRow}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={handleExport}
-            disabled={exporting}
-            style={({ pressed }) => [styles.outlineBtn, (pressed || exporting) && { opacity: 0.8 }]}
-          >
-            <AppText bold style={styles.outlineText}>{exporting ? t.settings.busy : t.receipt.export}</AppText>
-          </Pressable>
-          <Pressable accessibilityRole="button" onPress={onViewHistory} style={styles.secondaryBtn}>
-            <AppText style={styles.secondaryText}>{t.receipt.viewHistory}</AppText>
-          </Pressable>
-        </View>
+        <Pressable accessibilityRole="button" onPress={onNewSale} style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.85 }]}>
+          <AppText bold style={styles.primaryText}>{t.receipt.newSale}</AppText>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={handlePrint}
+          style={({ pressed }) => [styles.printBtn, pressed && { opacity: 0.8 }]}
+        >
+          <PrinterIcon size={16} color="#FFFFFF" />
+          <AppText bold style={styles.printText}>{t.printer.print}</AppText>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={handleExport}
+          disabled={exporting}
+          style={({ pressed }) => [styles.outlineBtn, (pressed || exporting) && { opacity: 0.8 }]}
+        >
+          <AppText bold style={styles.outlineText}>{exporting ? t.settings.busy : t.receipt.export}</AppText>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={onViewHistory} style={styles.secondaryBtn}>
+          <AppText style={styles.secondaryText}>{t.receipt.viewHistory}</AppText>
+        </Pressable>
       </View>
 
       <PrintReceiptModal
@@ -94,8 +103,13 @@ export default function ReceiptScreen({
         saleId={saleId}
         shopName={shopName}
         paperWidth={paperWidth}
+        printerMode={printerMode}
+        printerTarget={printerTarget}
+        printerDeviceName={printerDeviceName}
+        autoCut={autoCut}
         onClose={() => setPrintOpen(false)}
-        onPrinted={() => onToast(t.printer.mockPrinted)}
+        onPrinted={() => onToast(printerMode === 'mock' ? t.printer.mockPrinted : t.printer.printed)}
+        onError={(code) => onToast(code === 'send_unknown' ? t.printer.sendUnknown : t.printer.error)}
       />
     </View>
   );
@@ -116,19 +130,18 @@ const styles = StyleSheet.create({
   done: { color: '#fff', fontSize: 17 },
   scroll: { paddingBottom: 8 },
   footer: { padding: 16, gap: 10, backgroundColor: '#F5F5F5' },
-  btnRow: { flexDirection: 'row', gap: 10 },
-  primaryBtn: { flex: 1, backgroundColor: '#4A6CF7', borderRadius: radius.md, paddingVertical: 14, alignItems: 'center' },
-  primaryText: { color: '#fff', fontSize: 15 },
+  primaryBtn: { backgroundColor: '#4A6CF7', borderRadius: radius.md, paddingVertical: 11, alignItems: 'center' },
+  primaryText: { color: '#fff', fontSize: 14 },
   printBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: colors.header, borderRadius: radius.md, paddingVertical: 14,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: colors.header, borderRadius: radius.md, paddingVertical: 9,
   },
-  printText: { color: '#fff', fontSize: 15 },
+  printText: { color: '#fff', fontSize: 13 },
   outlineBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     borderWidth: 1, borderColor: colors.header, borderRadius: radius.md, paddingVertical: 9,
   },
   outlineText: { color: colors.header, fontSize: 13 },
-  secondaryBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingVertical: 9, alignItems: 'center' },
+  secondaryBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingVertical: 9, alignItems: 'center' },
   secondaryText: { color: colors.header, fontSize: 13 },
 });

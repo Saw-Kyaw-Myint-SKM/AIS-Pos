@@ -9,7 +9,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AppText from './src/components/AppText';
 import CartSheet, { type CartLine } from './src/components/CartSheet';
 import {
-  createCreditSale, createSale, clearSalesHistory, deleteCategory, deleteClothingItem, deleteCustomer, DEFAULT_PAPER_WIDTH, DEFAULT_SHOP_NAME, exportDatabaseFile, exportDatabaseToDownloads,
+  createCreditSale, createSale, clearSalesHistory, deleteCategory, deleteClothingItem, deleteCustomer, DATABASE_FILE_NAME, DEFAULT_PAPER_WIDTH, DEFAULT_SHOP_NAME, exportDatabaseFile, exportDatabaseToDownloads,
   CUSTOMER_HAS_CREDIT_ERROR, INSUFFICIENT_STOCK_ERROR, SALE_ITEM_UNAVAILABLE_ERROR,
   updateSale, settleCreditSale,
   findClothingByQr,
@@ -30,7 +30,6 @@ import type { ItemFormValue } from './src/screens/ItemFormScreen';
 import CategoryFormScreen, { emptyCategoryForm, categoryToForm } from './src/screens/CategoryFormScreen';
 import type { CategoryFormValue } from './src/screens/CategoryFormScreen';
 import ItemsScreen from './src/screens/ItemsScreen';
-import PrinterScreen from './src/screens/PrinterScreen';
 import ReceiptScreen from './src/screens/ReceiptScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import SaleDetailScreen from './src/screens/SaleDetailScreen';
@@ -47,12 +46,14 @@ import CreditLedgerScreen from './src/screens/CreditLedgerScreen';
 import TabBar from './src/components/TabBar';
 import { colors } from './src/theme';
 
+const isDuplicateBarcodeError = (error: unknown): boolean =>
+  error instanceof Error && /unique constraint failed:\s*items\.qr_code/i.test(error.message);
+
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
     'Pyidaungsu-Regular': require('./assets/fonts/Pyidaungsu-Regular.ttf'),
     'Pyidaungsu-Bold': require('./assets/fonts/Pyidaungsu-Bold.ttf'),
   });
-  const [dbVersion, setDbVersion] = useState(0);
 
   if (!fontsLoaded && !fontError) {
     return (
@@ -65,11 +66,10 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SQLiteProvider
-        key={`db-${dbVersion}`}
-        databaseName="clothes-pos.db"
+        databaseName={DATABASE_FILE_NAME}
         onInit={initializeDatabase}
       >
-        <PosApp dbVersion={dbVersion} onDatabaseReloaded={() => setDbVersion((v) => v + 1)} />
+        <PosApp />
       </SQLiteProvider>
     </SafeAreaProvider>
   );
@@ -79,15 +79,22 @@ const splashStyles = StyleSheet.create({
   box: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
 });
 
-function PosApp({
-  dbVersion: _dbVersion,
-  onDatabaseReloaded,
-}: {
-  dbVersion: number;
-  onDatabaseReloaded: () => void;
-}) {
+const startupStyles = StyleSheet.create({
+  container: { alignItems: 'center', justifyContent: 'center', padding: 28 },
+  loadingText: { color: colors.muted, fontSize: 14, marginTop: 16, textAlign: 'center' },
+  errorTitle: { color: colors.text, fontSize: 20, textAlign: 'center' },
+  errorBody: { color: colors.muted, fontSize: 14, lineHeight: 22, marginTop: 10, textAlign: 'center' },
+  retryButton: { backgroundColor: colors.header, borderRadius: 12, marginTop: 22, paddingHorizontal: 22, paddingVertical: 12 },
+  retryText: { color: '#FFFFFF', fontSize: 14 },
+});
+
+function PosApp() {
   const db = useSQLiteContext();
   const [booted, setBooted] = useState(false);
+  const [initialDataLoaded, setInitialDataLoaded] = useState(false);
+  const [startupError, setStartupError] = useState(false);
+  const [startupStage, setStartupStage] = useState('');
+  const [startupAttempt, setStartupAttempt] = useState(0);
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [route, setRoute] = useState<Route>({ name: 'home' });
   const [items, setItems] = useState<ClothingItem[]>([]);
@@ -140,31 +147,63 @@ function PosApp({
 
   useEffect(() => {
     let cancelled = false;
+    setBooted(false);
+    setStartupError(false);
+    setStartupStage('');
+
     (async () => {
-      const existing = await getCustomerProfile(db);
-      const name = await getAppSetting(db, SETTING_SHOP_NAME);
-      const unlocked = await getAppSetting(db, SETTING_SHOP_NAME_UNLOCKED);
-      const pWidth = await getAppSetting(db, SETTING_PRINTER_PAPER_WIDTH);
-      const savedStockAlertLimit = await getAppSetting(db, SETTING_STOCK_ALERT_LIMIT);
-      const profitReady = await getAppSetting(db, SETTING_PROFIT_TRACKING_READY);
-      const parsedStockAlertLimit = Number(savedStockAlertLimit);
-      const nextStockAlertLimit = Number.isSafeInteger(parsedStockAlertLimit) && parsedStockAlertLimit >= 0
-        ? parsedStockAlertLimit
-        : DEFAULT_STOCK_ALERT_LIMIT;
-      if (cancelled) return;
-      setProfile(existing);
-      setShopName(name ?? DEFAULT_SHOP_NAME);
-      setShopUnlocked(unlocked === '1');
-      setPaperWidthState((pWidth === '80' ? '80' : '58') as PaperWidth);
-      setStockAlertLimit(nextStockAlertLimit);
-      setProfitTrackingReady(profitReady === '1');
-      setRoute(existing ? { name: 'home' } : { name: 'register' });
-      setBooted(true);
+      const loadBootstrap = async <T,>(stage: string, request: Promise<T>): Promise<T> => {
+        try {
+          return await request;
+        } catch (error) {
+          console.error(`[startup:${stage}]`, error);
+          throw new Error(stage);
+        }
+      };
+
+      try {
+        const [
+          existing,
+          name,
+          unlocked,
+          pWidth,
+          savedStockAlertLimit,
+          profitReady,
+        ] = await Promise.all([
+          loadBootstrap('customer-profile', getCustomerProfile(db)),
+          loadBootstrap('settings:shop-name', getAppSetting(db, SETTING_SHOP_NAME)),
+          loadBootstrap('settings:shop-name-unlocked', getAppSetting(db, SETTING_SHOP_NAME_UNLOCKED)),
+          loadBootstrap('settings:printer-paper-width', getAppSetting(db, SETTING_PRINTER_PAPER_WIDTH)),
+          loadBootstrap('settings:stock-alert-limit', getAppSetting(db, SETTING_STOCK_ALERT_LIMIT)),
+          loadBootstrap('settings:profit-tracking-ready', getAppSetting(db, SETTING_PROFIT_TRACKING_READY)),
+        ]);
+        const parsedStockAlertLimit = Number(savedStockAlertLimit);
+        const nextStockAlertLimit = Number.isSafeInteger(parsedStockAlertLimit) && parsedStockAlertLimit >= 0
+          ? parsedStockAlertLimit
+          : DEFAULT_STOCK_ALERT_LIMIT;
+        if (cancelled) return;
+        setProfile(existing);
+        setShopName(name ?? DEFAULT_SHOP_NAME);
+        setShopUnlocked(unlocked === '1');
+        setPaperWidthState((pWidth === '80' ? '80' : '58') as PaperWidth);
+        setStockAlertLimit(nextStockAlertLimit);
+        setProfitTrackingReady(profitReady === '1');
+        setRoute(existing ? { name: 'home' } : { name: 'register' });
+      } catch (error) {
+        const stage = error instanceof Error && error.message ? error.message : 'BOOTSTRAP';
+        console.error('[startup:bootstrap]', error);
+        if (!cancelled) {
+          setStartupStage(stage);
+          setStartupError(true);
+        }
+      } finally {
+        if (!cancelled) setBooted(true);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [db]);
+  }, [db, startupAttempt]);
 
   const onRegisterDone = useCallback((next: CustomerProfile) => {
     setProfile(next);
@@ -184,19 +223,28 @@ function PosApp({
     setShopName(trimmed);
   }, [db]);
 
-  const setPaperWidth = useCallback(async (width: PaperWidth) => {
-    await setAppSetting(db, SETTING_PRINTER_PAPER_WIDTH, width);
-    setPaperWidthState(width);
-  }, [db]);
-
   const saveStockAlertLimit = useCallback(async (limit: number) => {
     await setAppSetting(db, SETTING_STOCK_ALERT_LIMIT, String(limit));
     setStockAlertLimit(limit);
   }, [db]);
 
   const refreshAll = useCallback(async () => {
+    const load = async <T,>(stage: string, request: Promise<T>): Promise<T> => {
+      try {
+        return await request;
+      } catch (error) {
+        console.error(`[startup:${stage}]`, error);
+        throw new Error(stage);
+      }
+    };
+
     const [itemRows, categoryRows, saleRows, customerRows, ledgerRows, summary] = await Promise.all([
-      getClothingItems(db), getCategories(db), getSales(db), getCustomers(db), getCreditLedger(db), getTodaySummary(db),
+      load('items', getClothingItems(db)),
+      load('categories', getCategories(db)),
+      load('sales', getSales(db)),
+      load('customers', getCustomers(db)),
+      load('credit-ledger', getCreditLedger(db)),
+      load('today-summary', getTodaySummary(db)),
     ]);
     setItems(itemRows);
     setCategories(categoryRows);
@@ -206,7 +254,28 @@ function PosApp({
     setToday(summary);
   }, [db]);
 
-  useEffect(() => { refreshAll(); }, [refreshAll]);
+  useEffect(() => {
+    let cancelled = false;
+    setInitialDataLoaded(false);
+
+    void refreshAll()
+      .then(() => {
+        if (!cancelled) setInitialDataLoaded(true);
+      })
+      .catch((error) => {
+        const stage = error instanceof Error && error.message ? error.message : 'REFRESH';
+        console.error('[startup:refreshAll]', error);
+        if (!cancelled) {
+          setStartupStage(stage);
+          setStartupError(true);
+          setBooted(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshAll, startupAttempt]);
 
   const openProfitReport = useCallback(() => {
     const proceed = async () => {
@@ -284,7 +353,12 @@ function PosApp({
 
   const onScanned = useCallback(async (value: string, format: string, keepOpen: boolean) => {
     if (!keepOpen) setScannerOpen(false);
-    const item = await findClothingByQr(db, value.trim());
+    const scannedCode = value.trim();
+    if (!scannedCode) {
+      Alert.alert(t.scanner.notFoundTitle, `${value}\n${t.scanner.notFoundBody}`);
+      return;
+    }
+    const item = await findClothingByQr(db, scannedCode);
     if (!item) {
       Alert.alert(t.scanner.notFoundTitle, `${value}\n${t.scanner.notFoundBody}`);
       return;
@@ -470,8 +544,40 @@ function PosApp({
               return;
             }
             await importDatabaseFile(db, picked.assets[0].uri);
+            await initializeDatabase(db);
+            const [
+              restoredProfile,
+              restoredShopName,
+              restoredShopUnlocked,
+              restoredPaperWidth,
+              restoredStockAlertLimit,
+              restoredProfitReady,
+            ] = await Promise.all([
+              getCustomerProfile(db),
+              getAppSetting(db, SETTING_SHOP_NAME),
+              getAppSetting(db, SETTING_SHOP_NAME_UNLOCKED),
+              getAppSetting(db, SETTING_PRINTER_PAPER_WIDTH),
+              getAppSetting(db, SETTING_STOCK_ALERT_LIMIT),
+              getAppSetting(db, SETTING_PROFIT_TRACKING_READY),
+            ]);
+            const parsedStockAlertLimit = Number(restoredStockAlertLimit);
+            setProfile(restoredProfile);
+            setShopName(restoredShopName ?? DEFAULT_SHOP_NAME);
+            setShopUnlocked(restoredShopUnlocked === '1');
+            setPaperWidthState(restoredPaperWidth === '80' ? '80' : '58');
+            setStockAlertLimit(Number.isSafeInteger(parsedStockAlertLimit) && parsedStockAlertLimit >= 0
+              ? parsedStockAlertLimit
+              : DEFAULT_STOCK_ALERT_LIMIT);
+            setProfitTrackingReady(restoredProfitReady === '1');
+            setCart({});
+            setTaxAmount(0);
+            setDiscountAmount(0);
+            setCartOpen(false);
+            setScannerOpen(false);
+            setLastScannedItem(null);
+            await refreshAll();
+            setRoute(restoredProfile ? { name: 'home' } : { name: 'register' });
             showToast(t.settings.loadSuccess);
-            onDatabaseReloaded();
           } catch {
             Alert.alert(t.settings.errorTitle, t.settings.loadError);
           } finally {
@@ -480,7 +586,7 @@ function PosApp({
         },
       },
     ]);
-  }, [db, settingsBusy, showToast, onDatabaseReloaded]);
+  }, [db, refreshAll, settingsBusy, showToast]);
 
   const saveItem = useCallback(async (form: ItemFormValue) => {
     const price = Number(form.price);
@@ -491,12 +597,13 @@ function PosApp({
       Alert.alert(t.items.invalidTitle, t.items.invalidBody);
       return;
     }
+    const normalizedQrCode = form.qrCode.trim();
     try {
       await saveClothingItem(db, {
         id: form.id,
         name: form.name.trim(),
         size: form.size.trim(),
-        qrCode: form.qrCode.trim(),
+        qrCode: normalizedQrCode || null,
         price,
         purchaseCost,
         categoryId: form.categoryId,
@@ -509,8 +616,11 @@ function PosApp({
       setRoute({ name: 'clothes' });
       await refreshAll();
       showToast(t.toast.saved);
-    } catch {
-      Alert.alert(t.items.dupTitle, t.items.dupBody);
+    } catch (error) {
+      Alert.alert(
+        t.items.dupTitle,
+        normalizedQrCode && isDuplicateBarcodeError(error) ? t.items.dupBody : t.cart.checkoutError,
+      );
     }
   }, [db, refreshAll, showToast]);
 
@@ -577,12 +687,32 @@ function PosApp({
     { key: 'history', label: t.tabs.history },
   ];
 
-  if (!booted) {
+  if (!booted || !initialDataLoaded || startupError) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <StatusBar style="dark" backgroundColor="#FFFFFF" />
-        <View style={[styles.content, { alignItems: 'center', justifyContent: 'center' }]}>
-          <ActivityIndicator size="large" color={colors.header} />
+        <View style={[styles.content, startupStyles.container]}>
+          {!booted ? (
+            <>
+              <ActivityIndicator size="large" color={colors.header} />
+              <AppText style={startupStyles.loadingText}>{t.startup.loading}</AppText>
+            </>
+          ) : (
+            <>
+              <AppText bold style={startupStyles.errorTitle}>{t.startup.errorTitle}</AppText>
+              <AppText style={startupStyles.errorBody}>{t.startup.errorBody}</AppText>
+              {startupStage ? (
+                <AppText style={startupStyles.errorBody}>{t.startup.diagnostic} {startupStage}</AppText>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setStartupAttempt((attempt) => attempt + 1)}
+                style={({ pressed }) => [startupStyles.retryButton, pressed && { opacity: 0.8 }]}
+              >
+                <AppText bold style={startupStyles.retryText}>{t.startup.retry}</AppText>
+              </Pressable>
+            </>
+          )}
         </View>
       </SafeAreaView>
     );
@@ -609,7 +739,6 @@ function PosApp({
             onOpenProfitReport={openProfitReport}
             onScan={() => setScannerOpen(true)}
             onOpenSettings={() => setRoute({ name: 'settings' })}
-            onOpenPrinter={() => setRoute({ name: 'printer', returnTo: { name: 'home' } })}
             onOpenStockAlert={() => setRoute({ name: 'stockAlert' })}
             onOpenCustomers={() => setRoute({ name: 'customers' })}
             onStartCreditSale={() => setRoute({ name: 'creditSell' })}
@@ -703,29 +832,17 @@ function PosApp({
           <ReceiptScreen
             saleId={route.saleId}
             shopName={shopName}
-            paperWidth={paperWidth}
-            onSelectPrinter={() => setRoute({
-              name: 'printer',
-              returnTo: { name: 'receipt', saleId: route.saleId },
-            })}
             onNewSale={() => setRoute({ name: 'sell' })}
             onViewHistory={() => setRoute({ name: 'history' })}
-            onToast={showToast}
           />
         )}
         {route.name === 'saleDetail' && (
           <SaleDetailScreen
             saleId={route.saleId}
             shopName={shopName}
-            paperWidth={paperWidth}
-            onSelectPrinter={() => setRoute({
-              name: 'printer',
-              returnTo: { name: 'saleDetail', saleId: route.saleId },
-            })}
             onBack={() => setRoute({ name: 'history' })}
             editable={!creditLedger.some((credit) => credit.saleId === route.saleId)}
             onEdit={() => setRoute({ name: 'saleEdit', saleId: route.saleId })}
-            onToast={showToast}
           />
         )}
         {route.name === 'saleEdit' && (
@@ -787,14 +904,6 @@ function PosApp({
         )}
         {route.name === 'about' && (
           <AboutScreen onBack={() => setRoute({ name: 'settings' })} />
-        )}
-        {route.name === 'printer' && (
-          <PrinterScreen
-            onBack={() => setRoute(getBackRoute(route) ?? { name: 'home' })}
-            paperWidth={paperWidth}
-            onSetPaperWidth={setPaperWidth}
-            onToast={showToast}
-          />
         )}
       </View>
 
@@ -859,9 +968,9 @@ const styles = StyleSheet.create({
   content: { flex: 1, backgroundColor: '#FFFFFF' },
   toast: {
     position: 'absolute', top: 48, left: 24, right: 24,
-    backgroundColor: '#111827', borderRadius: 12,
+    backgroundColor: '#DCFCE7', borderRadius: 12,
     paddingVertical: 12, alignItems: 'center',
     shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6,
   },
-  toastText: { color: '#fff', fontSize: 14 },
+  toastText: { color: '#166534', fontSize: 14 },
 });

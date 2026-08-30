@@ -1,7 +1,7 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { getSale, getSaleItems, type PaperWidth } from '../db';
+import { getSale, getSaleItems, type PaperWidth, type PrinterMode } from '../db';
 import { t } from '../i18n';
 import { exportReceiptPdf } from '../receiptHtml';
 import AppText from '../components/AppText';
@@ -12,7 +12,11 @@ import { BackArrowIcon, PrinterIcon } from '../components/ServiceIcon';
 type Props = {
   saleId: number;
   shopName: string;
+  printerMode: PrinterMode;
+  printerTarget: string;
+  printerDeviceName: string;
   paperWidth: PaperWidth;
+  autoCut: boolean;
   onSelectPrinter: () => void;
   onBack: () => void;
   onEdit: () => void;
@@ -23,7 +27,11 @@ type Props = {
 export default function SaleDetailScreen({
   saleId,
   shopName,
+  printerMode,
+  printerTarget,
+  printerDeviceName,
   paperWidth,
+  autoCut,
   onSelectPrinter,
   onBack,
   onEdit,
@@ -49,6 +57,11 @@ export default function SaleDetailScreen({
   };
 
   const handlePrint = () => {
+    if (!printerTarget) {
+      onToast(t.printer.notSelected);
+      onSelectPrinter();
+      return;
+    }
     setPrintOpen(true);
   };
 
@@ -100,8 +113,13 @@ export default function SaleDetailScreen({
         saleId={saleId}
         shopName={shopName}
         paperWidth={paperWidth}
+        printerMode={printerMode}
+        printerTarget={printerTarget}
+        printerDeviceName={printerDeviceName}
+        autoCut={autoCut}
         onClose={() => setPrintOpen(false)}
-        onPrinted={() => onToast(t.printer.mockPrinted)}
+        onPrinted={() => onToast(printerMode === 'mock' ? t.printer.mockPrinted : t.printer.printed)}
+        onError={(code) => onToast(code === 'send_unknown' ? t.printer.sendUnknown : t.printer.error)}
       />
     </View>
   );
@@ -112,7 +130,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#4A6CF7',
     flexDirection: 'row', alignItems: 'center',
-    minHeight: 56, paddingHorizontal: 12, paddingVertical: 8, gap: 10,
+    paddingHorizontal: 12, paddingVertical: 14, gap: 10,
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   title: { flex: 1, color: '#fff', fontSize: 18, textAlign: 'center' },
