@@ -137,12 +137,87 @@ const DEFAULT_CATEGORIES: { name: string; color: string }[] = [
   { name: 'အခြား', color: '#6B7280' },
 ];
 
+type TableColumn = { name: string };
+type TableIndex = { name: string; unique: number };
+type IndexColumn = { name: string };
+
+async function getColumnNames(db: SQLiteDatabase, tableName: string): Promise<Set<string>> {
+  const columns = await db.getAllAsync<TableColumn>(`PRAGMA table_info(${tableName})`);
+  return new Set(columns.map((column) => column.name));
+}
+
+async function addColumnIfMissing(
+  db: SQLiteDatabase,
+  tableName: string,
+  columns: Set<string>,
+  columnName: string,
+  definition: string,
+): Promise<void> {
+  if (columns.has(columnName)) return;
+  await db.execAsync(`ALTER TABLE ${tableName} ADD COLUMN ${definition}`);
+  columns.add(columnName);
+}
+
+async function hasUniqueSingleColumnIndex(
+  db: SQLiteDatabase,
+  tableName: string,
+  columnName: string,
+): Promise<boolean> {
+  const indexes = await db.getAllAsync<TableIndex>(`PRAGMA index_list(${tableName})`);
+  for (const index of indexes) {
+    if (!index.unique) continue;
+    const columns = await db.getAllAsync<IndexColumn>(`PRAGMA index_info(${index.name})`);
+    if (columns.length === 1 && columns[0].name === columnName) return true;
+  }
+  return false;
+}
+
+async function createAppSettingsKeyIndexIfSafe(db: SQLiteDatabase): Promise<void> {
+  const invalid = await db.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) AS count FROM app_settings WHERE key IS NULL OR TRIM(key) = ''`,
+  );
+  const duplicate = await db.getFirstAsync<{ key: string }>(
+    `SELECT key FROM app_settings
+     WHERE key IS NOT NULL AND TRIM(key) <> ''
+     GROUP BY key
+     HAVING COUNT(*) > 1
+     LIMIT 1`,
+  );
+  if ((invalid?.count ?? 0) > 0 || duplicate) {
+    console.warn('[database:migration] Skipped app_settings key index because invalid or duplicate setting keys were preserved.');
+    return;
+  }
+  if (!await hasUniqueSingleColumnIndex(db, 'app_settings', 'key')) {
+    await db.execAsync('CREATE UNIQUE INDEX IF NOT EXISTS idx_app_settings_key_unique ON app_settings(key)');
+  }
+}
+
+async function createQrCodeIndexIfSafe(db: SQLiteDatabase): Promise<void> {
+  const duplicate = await db.getFirstAsync<{ qr_code: string }>(
+    `SELECT qr_code
+     FROM items
+     WHERE qr_code IS NOT NULL AND TRIM(qr_code) <> ''
+     GROUP BY qr_code
+     HAVING COUNT(*) > 1
+     LIMIT 1`,
+  );
+  if (duplicate) {
+    console.warn('[database:migration] Skipped QR unique index because existing duplicate QR codes were preserved.');
+    return;
+  }
+  await db.execAsync(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_items_qr_code_unique ON items(qr_code) WHERE qr_code IS NOT NULL AND TRIM(qr_code) <> \'\'',
+  );
+}
+
 export async function initializeDatabase(db: SQLiteDatabase) {
-  // Set WAL mode in its own execAsync so the journal-mode switch doesn't
-  // leave an open statement when the enclosing transaction commits.
-  // Without this, expo-sqlite 16 on Android rejects subsequent closeAsync
-  // with "unable to close due to unfinalized statements".
-  await db.execAsync('PRAGMA journal_mode = WAL;');
+  // WAL may not be supported by a restored, locked, or device-specific database.
+  // Continue with SQLite's existing journal mode instead of preventing startup.
+  try {
+    await db.execAsync('PRAGMA journal_mode = WAL;');
+  } catch {
+    // Best effort: SQLite remains usable with its existing journal mode.
+  }
   await db.execAsync('PRAGMA foreign_keys = ON;');
 
   // Rename the legacy inventory table in place before creating the canonical
@@ -152,11 +227,18 @@ export async function initializeDatabase(db: SQLiteDatabase) {
   );
   const hasLegacyClothes = existingInventoryTables.some((table) => table.name === 'clothes');
   const hasItems = existingInventoryTables.some((table) => table.name === 'items');
-  if (hasLegacyClothes && hasItems) {
-    throw new Error('Both legacy clothes and items tables exist; inventory migration cannot continue safely.');
-  }
-  if (hasLegacyClothes) {
+  // Some older installs can contain both names after an interrupted migration.
+  // Keep the canonical items table intact and leave the legacy table untouched
+  // rather than preventing the app from starting or risking inventory loss.
+  if (hasLegacyClothes && !hasItems) {
     await db.execAsync('ALTER TABLE clothes RENAME TO items;');
+  }
+
+  // Recover only our known scratch table from an interrupted QR migration.
+  // It is safe to remove when the canonical items table still exists; no user
+  // inventory table is deleted.
+  if (hasItems) {
+    await db.execAsync('DROP TABLE IF EXISTS items_rebuilt;');
   }
 
   // Schema in a single statement (one transaction). Keeps the connection
@@ -192,6 +274,7 @@ export async function initializeDatabase(db: SQLiteDatabase) {
       choice_type TEXT NOT NULL DEFAULT 'color',
       color_value TEXT NOT NULL DEFAULT '',
       photo_uri TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -238,93 +321,126 @@ export async function initializeDatabase(db: SQLiteDatabase) {
     CREATE INDEX IF NOT EXISTS idx_credit_sales_status ON credit_sales(settled_at, created_at DESC);
   `);
 
-  const cols = await db.getAllAsync<{ name: string; notnull: number }>('PRAGMA table_info(items)');
-  const colNames = new Set(cols.map((c) => c.name));
-  if (!colNames.has('purchase_cost')) {
-    await db.execAsync('ALTER TABLE items ADD COLUMN purchase_cost REAL NOT NULL DEFAULT 0 CHECK (purchase_cost >= 0)');
+  // A previous release used camelCase inventory columns. Add canonical
+  // columns before any reads so an upgraded install cannot fail at launch.
+  const legacyItemColumnNames = await getColumnNames(db, 'items');
+  if (!legacyItemColumnNames.has('qr_code') && legacyItemColumnNames.has('qrCode')) {
+    // SQLite cannot add a UNIQUE column through ALTER TABLE. Add the value
+    // column first, preserve every existing QR code, then index only when safe.
+    await addColumnIfMissing(db, 'items', legacyItemColumnNames, 'qr_code', 'qr_code TEXT');
+    await db.execAsync("UPDATE items SET qr_code = NULLIF(TRIM(qrCode), '') WHERE qr_code IS NULL");
   }
-  if (!colNames.has('category')) {
-    await db.execAsync("ALTER TABLE items ADD COLUMN category TEXT NOT NULL DEFAULT ''");
+  if (!legacyItemColumnNames.has('choice_type') && legacyItemColumnNames.has('choiceType')) {
+    await addColumnIfMissing(db, 'items', legacyItemColumnNames, 'choice_type', "choice_type TEXT NOT NULL DEFAULT 'color'");
+    await db.execAsync("UPDATE items SET choice_type = COALESCE(NULLIF(choiceType, ''), 'color')");
   }
-  if (!colNames.has('stock')) {
-    await db.execAsync('ALTER TABLE items ADD COLUMN stock INTEGER NOT NULL DEFAULT 0');
-  }
-  if (!colNames.has('choice_type')) {
-    await db.execAsync("ALTER TABLE items ADD COLUMN choice_type TEXT NOT NULL DEFAULT 'color'");
-  }
-  if (!colNames.has('color_value')) {
-    await db.execAsync("ALTER TABLE items ADD COLUMN color_value TEXT NOT NULL DEFAULT ''");
-  }
-  if (!colNames.has('note')) {
-    await db.execAsync("ALTER TABLE items ADD COLUMN note TEXT NOT NULL DEFAULT ''");
-  }
-  if (!colNames.has('photo_uri')) {
-    await db.execAsync("ALTER TABLE items ADD COLUMN photo_uri TEXT NOT NULL DEFAULT ''");
-  }
-  if (!colNames.has('category_id')) {
-    await db.execAsync('ALTER TABLE items ADD COLUMN category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL');
+  if (!legacyItemColumnNames.has('color_value') && legacyItemColumnNames.has('colorValue')) {
+    await addColumnIfMissing(db, 'items', legacyItemColumnNames, 'color_value', "color_value TEXT NOT NULL DEFAULT ''");
+    await db.execAsync("UPDATE items SET color_value = COALESCE(colorValue, '')");
   }
 
-  const qrCodeColumn = cols.find((column) => column.name === 'qr_code');
+  const colNames = await getColumnNames(db, 'items');
+  await addColumnIfMissing(db, 'items', colNames, 'purchase_cost', 'purchase_cost REAL NOT NULL DEFAULT 0 CHECK (purchase_cost >= 0)');
+  await addColumnIfMissing(db, 'items', colNames, 'category', "category TEXT NOT NULL DEFAULT ''");
+  await addColumnIfMissing(db, 'items', colNames, 'stock', 'stock INTEGER NOT NULL DEFAULT 0');
+  await addColumnIfMissing(db, 'items', colNames, 'choice_type', "choice_type TEXT NOT NULL DEFAULT 'color'");
+  await addColumnIfMissing(db, 'items', colNames, 'color_value', "color_value TEXT NOT NULL DEFAULT ''");
+  await addColumnIfMissing(db, 'items', colNames, 'note', "note TEXT NOT NULL DEFAULT ''");
+  await addColumnIfMissing(db, 'items', colNames, 'photo_uri', "photo_uri TEXT NOT NULL DEFAULT ''");
+  await addColumnIfMissing(db, 'items', colNames, 'category_id', 'category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL');
+  await createQrCodeIndexIfSafe(db);
+
+  const itemColumnDetails = await db.getAllAsync<{ name: string; notnull: number }>('PRAGMA table_info(items)');
+  const qrCodeColumn = itemColumnDetails.find((column) => column.name === 'qr_code');
+  const purchaseCostExpression = colNames.has('purchase_cost') ? 'purchase_cost' : '0';
   if (qrCodeColumn?.notnull) {
-    const foreignKeys = await db.getFirstAsync<{ foreign_keys: number }>('PRAGMA foreign_keys');
-    await db.execAsync('PRAGMA foreign_keys = OFF');
+    // This table is a migration scratch table; it was cleared above if an
+    // earlier interrupted run left it behind. Keep a backup until the rebuilt
+    // canonical table is in place, then discard the backup.
+    await db.execAsync('PRAGMA foreign_keys = OFF;');
     try {
-      await db.withTransactionAsync(async () => {
-        await db.execAsync(`
-          CREATE TABLE items_rebuilt (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            qr_code TEXT UNIQUE,
-            name TEXT NOT NULL,
-            size TEXT NOT NULL,
-            price REAL NOT NULL CHECK (price >= 0),
-            category TEXT NOT NULL DEFAULT '',
-            category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
-            stock INTEGER NOT NULL DEFAULT 0,
-            choice_type TEXT NOT NULL DEFAULT 'color',
-            color_value TEXT NOT NULL DEFAULT '',
-            photo_uri TEXT NOT NULL DEFAULT '',
-            note TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-          );
-          INSERT INTO items_rebuilt (
-            id, qr_code, name, size, price, category, category_id, stock,
-            choice_type, color_value, photo_uri, note, created_at, updated_at
-          )
-          SELECT
-            id, NULLIF(TRIM(qr_code), ''), name, size, price, category, category_id, stock,
-            choice_type, color_value, photo_uri, note, created_at, updated_at
-          FROM items;
-          DROP TABLE items;
-          ALTER TABLE items_rebuilt RENAME TO items;
-        `);
-      });
+      await db.execAsync(`
+        CREATE TABLE items_rebuilt (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          qr_code TEXT UNIQUE,
+          name TEXT NOT NULL,
+          size TEXT NOT NULL,
+          price REAL NOT NULL CHECK (price >= 0),
+          purchase_cost REAL NOT NULL DEFAULT 0 CHECK (purchase_cost >= 0),
+          category TEXT NOT NULL DEFAULT '',
+          category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+          stock INTEGER NOT NULL DEFAULT 0,
+          choice_type TEXT NOT NULL DEFAULT 'color',
+          color_value TEXT NOT NULL DEFAULT '',
+          photo_uri TEXT NOT NULL DEFAULT '',
+          note TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO items_rebuilt (
+          id, qr_code, name, size, price, purchase_cost, category, category_id, stock,
+          choice_type, color_value, photo_uri, note, created_at, updated_at
+        )
+        SELECT
+          id, NULLIF(TRIM(qr_code), ''), name, size, price, ${purchaseCostExpression}, category, category_id, stock,
+          choice_type, color_value, photo_uri, note, created_at, updated_at
+        FROM items;
+        ALTER TABLE items RENAME TO items_pre_qr_rebuild;
+        ALTER TABLE items_rebuilt RENAME TO items;
+        DROP TABLE items_pre_qr_rebuild;
+      `);
     } finally {
-      await db.execAsync(`PRAGMA foreign_keys = ${foreignKeys?.foreign_keys ? 'ON' : 'OFF'}`);
+      await db.execAsync('PRAGMA foreign_keys = ON;');
     }
   }
 
-  const salesCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(sales)');
-  const salesColNames = new Set(salesCols.map((c) => c.name));
-  if (!salesColNames.has('tax_amount')) {
-    await db.execAsync('ALTER TABLE sales ADD COLUMN tax_amount REAL NOT NULL DEFAULT 0');
+  const salesCols = await getColumnNames(db, 'sales');
+  await addColumnIfMissing(db, 'sales', salesCols, 'tax_amount', 'tax_amount REAL NOT NULL DEFAULT 0');
+  await addColumnIfMissing(db, 'sales', salesCols, 'tax_reason', "tax_reason TEXT NOT NULL DEFAULT ''");
+  await addColumnIfMissing(db, 'sales', salesCols, 'discount_amount', 'discount_amount REAL NOT NULL DEFAULT 0');
+  await addColumnIfMissing(db, 'sales', salesCols, 'discount_reason', "discount_reason TEXT NOT NULL DEFAULT ''");
+
+  const saleItemCols = await getColumnNames(db, 'sale_items');
+  await addColumnIfMissing(db, 'sale_items', saleItemCols, 'cost_price', 'cost_price REAL NOT NULL DEFAULT 0 CHECK (cost_price >= 0)');
+
+  // The current app reads these fields at startup. Legacy installs may have
+  // the tables but not the newer columns, so repair them additively.
+  const profileCols = await getColumnNames(db, 'customer_profile');
+  await addColumnIfMissing(db, 'customer_profile', profileCols, 'name', "name TEXT NOT NULL DEFAULT ''");
+  await addColumnIfMissing(db, 'customer_profile', profileCols, 'phone', "phone TEXT NOT NULL DEFAULT ''");
+  await addColumnIfMissing(db, 'customer_profile', profileCols, 'email', "email TEXT NOT NULL DEFAULT ''");
+  await addColumnIfMissing(db, 'customer_profile', profileCols, 'address', "address TEXT NOT NULL DEFAULT ''");
+  const hadCamelCreatedAt = profileCols.has('createdAt');
+  const hadCamelUpdatedAt = profileCols.has('updatedAt');
+  await addColumnIfMissing(db, 'customer_profile', profileCols, 'created_at', "created_at TEXT NOT NULL DEFAULT ''");
+  await addColumnIfMissing(db, 'customer_profile', profileCols, 'updated_at', "updated_at TEXT NOT NULL DEFAULT ''");
+  if (hadCamelCreatedAt) {
+    await db.execAsync("UPDATE customer_profile SET created_at = createdAt WHERE created_at = '' AND createdAt IS NOT NULL");
   }
-  if (!salesColNames.has('tax_reason')) {
-    await db.execAsync("ALTER TABLE sales ADD COLUMN tax_reason TEXT NOT NULL DEFAULT ''");
-  }
-  if (!salesColNames.has('discount_amount')) {
-    await db.execAsync('ALTER TABLE sales ADD COLUMN discount_amount REAL NOT NULL DEFAULT 0');
-  }
-  if (!salesColNames.has('discount_reason')) {
-    await db.execAsync("ALTER TABLE sales ADD COLUMN discount_reason TEXT NOT NULL DEFAULT ''");
+  if (hadCamelUpdatedAt) {
+    await db.execAsync("UPDATE customer_profile SET updated_at = updatedAt WHERE updated_at = '' AND updatedAt IS NOT NULL");
   }
 
-  const saleItemCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(sale_items)');
-  const saleItemColNames = new Set(saleItemCols.map((c) => c.name));
-  if (!saleItemColNames.has('cost_price')) {
-    await db.execAsync('ALTER TABLE sale_items ADD COLUMN cost_price REAL NOT NULL DEFAULT 0 CHECK (cost_price >= 0)');
-  }
+  const appSettingsCols = await getColumnNames(db, 'app_settings');
+  await addColumnIfMissing(db, 'app_settings', appSettingsCols, 'key', 'key TEXT');
+  await addColumnIfMissing(db, 'app_settings', appSettingsCols, 'value', 'value TEXT');
+  await createAppSettingsKeyIndexIfSafe(db);
+
+  const categoryCols = await getColumnNames(db, 'categories');
+  await addColumnIfMissing(db, 'categories', categoryCols, 'color', "color TEXT NOT NULL DEFAULT '#4F46E5'");
+  await addColumnIfMissing(db, 'categories', categoryCols, 'position', 'position INTEGER NOT NULL DEFAULT 0');
+  await addColumnIfMissing(db, 'categories', categoryCols, 'created_at', "created_at TEXT NOT NULL DEFAULT ''");
+  await addColumnIfMissing(db, 'categories', categoryCols, 'updated_at', "updated_at TEXT NOT NULL DEFAULT ''");
+
+  const customerCols = await getColumnNames(db, 'customers');
+  await addColumnIfMissing(db, 'customers', customerCols, 'phone', "phone TEXT NOT NULL DEFAULT ''");
+  await addColumnIfMissing(db, 'customers', customerCols, 'address', "address TEXT NOT NULL DEFAULT ''");
+  await addColumnIfMissing(db, 'customers', customerCols, 'created_at', "created_at TEXT NOT NULL DEFAULT ''");
+  await addColumnIfMissing(db, 'customers', customerCols, 'updated_at', "updated_at TEXT NOT NULL DEFAULT ''");
+
+  const creditCols = await getColumnNames(db, 'credit_sales');
+  await addColumnIfMissing(db, 'credit_sales', creditCols, 'settled_at', 'settled_at TEXT');
+  await addColumnIfMissing(db, 'credit_sales', creditCols, 'created_at', "created_at TEXT NOT NULL DEFAULT ''");
 
   // Track first-run seeding with PRAGMA user_version so that a re-import of a
   // backup (possibly containing zero items) does NOT re-seed sample data.
@@ -1026,6 +1142,7 @@ export async function savePrinterSettings(db: SQLiteDatabase, settings: PrinterS
   });
 }
 
+// Keep the provider and import/export path on the same canonical filename.
 export const DATABASE_FILE_NAME = 'clothes-pos.db';
 
 export async function exportDatabaseFile(db: SQLiteDatabase): Promise<string> {
@@ -1071,29 +1188,8 @@ export async function exportDatabaseToDownloads(db: SQLiteDatabase): Promise<boo
 
 export async function importDatabaseFile(db: SQLiteDatabase, sourceUri: string): Promise<void> {
   const bytes = await readPickedBytes(sourceUri);
-  if (!bytes || bytes.byteLength === 0) throw new Error('Picked file is empty');
-  try {
-    await db.closeAsync();
-  } catch {
-    // already closed or unavailable
-  }
-  const dir = getDbDirectory();
-  const dest = new File(dir, DATABASE_FILE_NAME);
-  if (!dest.exists) dest.create();
-  dest.write(bytes);
-
-  try {
-    const wal = new File(dir, DATABASE_FILE_NAME + '-wal');
-    if (wal.exists) wal.delete();
-  } catch {
-    // ignore
-  }
-  try {
-    const shm = new File(dir, DATABASE_FILE_NAME + '-shm');
-    if (shm.exists) shm.delete();
-  } catch {
-    // ignore
-  }
+  if (bytes.byteLength === 0) throw new Error('Picked file is empty');
+  await db.deserializeAsync(bytes);
 }
 
 async function readPickedBytes(uri: string): Promise<Uint8Array> {
