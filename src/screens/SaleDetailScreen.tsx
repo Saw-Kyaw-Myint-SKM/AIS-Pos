@@ -1,46 +1,30 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { getSale, getSaleItems, type PaperWidth, type PrinterMode } from '../db';
+import { getSale, getSaleItems } from '../db';
 import { t } from '../i18n';
 import { exportReceiptPdf } from '../receiptHtml';
 import AppText from '../components/AppText';
-import PrintReceiptModal from '../components/PrintReceiptModal';
 import Receipt from '../components/Receipt';
-import { BackArrowIcon, PrinterIcon } from '../components/ServiceIcon';
+import { BackArrowIcon } from '../components/ServiceIcon';
 
 type Props = {
   saleId: number;
   shopName: string;
-  printerMode: PrinterMode;
-  printerTarget: string;
-  printerDeviceName: string;
-  paperWidth: PaperWidth;
-  autoCut: boolean;
-  onSelectPrinter: () => void;
   onBack: () => void;
   onEdit: () => void;
   editable?: boolean;
-  onToast: (message: string) => void;
 };
 
 export default function SaleDetailScreen({
   saleId,
   shopName,
-  printerMode,
-  printerTarget,
-  printerDeviceName,
-  paperWidth,
-  autoCut,
-  onSelectPrinter,
   onBack,
   onEdit,
   editable = true,
-  onToast,
 }: Props) {
   const db = useSQLiteContext();
   const [exporting, setExporting] = useState(false);
-  const [printOpen, setPrintOpen] = useState(false);
 
   const handleExport = async () => {
     if (exporting) return;
@@ -50,19 +34,10 @@ export default function SaleDetailScreen({
       if (!sale) return;
       await exportReceiptPdf(sale, items, shopName);
     } catch {
-      // best effort
+      // Best effort — sharing may be dismissed or unavailable.
     } finally {
       setExporting(false);
     }
-  };
-
-  const handlePrint = () => {
-    if (!printerTarget) {
-      onToast(t.printer.notSelected);
-      onSelectPrinter();
-      return;
-    }
-    setPrintOpen(true);
   };
 
   return (
@@ -86,15 +61,7 @@ export default function SaleDetailScreen({
           >
             <AppText bold style={styles.headerEditText}>{t.saleEdit.edit}</AppText>
           </Pressable>
-        ) : null}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t.printer.print}
-          onPress={handlePrint}
-          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
-        >
-          <PrinterIcon size={24} color="#FFFFFF" />
-        </Pressable>
+        ) : <View style={styles.backBtn} />}
       </View>
       <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
         <Receipt saleId={saleId} shopName={shopName} />
@@ -107,20 +74,6 @@ export default function SaleDetailScreen({
           <AppText bold style={styles.pdfText}>{exporting ? t.settings.busy : t.receipt.export}</AppText>
         </Pressable>
       </ScrollView>
-
-      <PrintReceiptModal
-        visible={printOpen}
-        saleId={saleId}
-        shopName={shopName}
-        paperWidth={paperWidth}
-        printerMode={printerMode}
-        printerTarget={printerTarget}
-        printerDeviceName={printerDeviceName}
-        autoCut={autoCut}
-        onClose={() => setPrintOpen(false)}
-        onPrinted={() => onToast(printerMode === 'mock' ? t.printer.mockPrinted : t.printer.printed)}
-        onError={(code) => onToast(code === 'send_unknown' ? t.printer.sendUnknown : t.printer.error)}
-      />
     </View>
   );
 }

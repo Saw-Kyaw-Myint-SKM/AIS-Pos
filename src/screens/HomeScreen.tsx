@@ -15,7 +15,6 @@ import AppText from '../components/AppText';
 import {
   DollarIcon,
   PackageIcon,
-  PrinterIcon,
   ReceiptIcon,
   ScanIcon,
   SettingsIcon,
@@ -37,7 +36,6 @@ type Props = {
   onOpenProfitReport: () => void;
   onScan: () => void;
   onOpenSettings: () => void;
-  onOpenPrinter: () => void;
   onOpenStockAlert: () => void;
   onOpenCustomers: () => void;
   onStartCreditSale: () => void;
@@ -64,7 +62,6 @@ export default function HomeScreen({
   onOpenProfitReport,
   onScan,
   onOpenSettings,
-  onOpenPrinter,
   onOpenStockAlert,
   onOpenCustomers,
   onStartCreditSale,
@@ -96,7 +93,6 @@ export default function HomeScreen({
       onPress: onOpenStockAlert,
       badgeCount: lowStockCount,
     },
-    { key: 'printer', label: t.home.printer, iconBg: colors.iconSlate, Icon: PrinterIcon, onPress: onOpenPrinter },
     { key: 'setting', label: t.home.setting, iconBg: colors.iconSlate, Icon: SettingsIcon, onPress: onOpenSettings },
   ];
 

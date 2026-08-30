@@ -1,8 +1,3 @@
-export type PrinterReturnRoute =
-  | { name: 'home' }
-  | { name: 'receipt'; saleId: number }
-  | { name: 'saleDetail'; saleId: number };
-
 export type Route =
   | { name: 'register' }
   | { name: 'home' }
@@ -17,7 +12,6 @@ export type Route =
   | { name: 'categoryForm'; categoryId?: number }
   | { name: 'settings' }
   | { name: 'about' }
-  | { name: 'printer'; returnTo?: PrinterReturnRoute }
   | { name: 'stockAlert' }
   | { name: 'customers' }
   | { name: 'customerForm'; customerId?: number; returnTo?: 'customers' | 'creditCheckout' }
@@ -60,7 +54,5 @@ export function getBackRoute(route: Route): Route | null {
     case 'itemForm':
     case 'categoryForm':
       return { name: 'clothes' };
-    case 'printer':
-      return route.returnTo ?? { name: 'home' };
   }
 }

@@ -1,45 +1,28 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { getSale, getSaleItems, type PaperWidth, type PrinterMode } from '../db';
+import { getSale, getSaleItems } from '../db';
 import { t } from '../i18n';
 import { exportReceiptPdf } from '../receiptHtml';
 import { colors, radius } from '../theme';
 import AppText from '../components/AppText';
-import PrintReceiptModal from '../components/PrintReceiptModal';
 import Receipt from '../components/Receipt';
-import { PrinterIcon } from '../components/ServiceIcon';
 
 type Props = {
   saleId: number;
   shopName: string;
-  printerMode: PrinterMode;
-  printerTarget: string;
-  printerDeviceName: string;
-  paperWidth: PaperWidth;
-  autoCut: boolean;
-  onSelectPrinter: () => void;
   onNewSale: () => void;
   onViewHistory: () => void;
-  onToast: (message: string) => void;
 };
 
 export default function ReceiptScreen({
   saleId,
   shopName,
-  printerMode,
-  printerTarget,
-  printerDeviceName,
-  paperWidth,
-  autoCut,
-  onSelectPrinter,
   onNewSale,
   onViewHistory,
-  onToast,
 }: Props) {
   const db = useSQLiteContext();
   const [exporting, setExporting] = useState(false);
-  const [printOpen, setPrintOpen] = useState(false);
 
   const handleExport = async () => {
     if (exporting) return;
@@ -49,19 +32,10 @@ export default function ReceiptScreen({
       if (!sale) return;
       await exportReceiptPdf(sale, items, shopName);
     } catch {
-      // best effort — sharing may be dismissed or unavailable
+      // Best effort — sharing may be dismissed or unavailable.
     } finally {
       setExporting(false);
     }
-  };
-
-  const handlePrint = () => {
-    if (!printerTarget) {
-      onToast(t.printer.notSelected);
-      onSelectPrinter();
-      return;
-    }
-    setPrintOpen(true);
   };
 
   return (
@@ -79,14 +53,6 @@ export default function ReceiptScreen({
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          onPress={handlePrint}
-          style={({ pressed }) => [styles.printBtn, pressed && { opacity: 0.8 }]}
-        >
-          <PrinterIcon size={16} color="#FFFFFF" />
-          <AppText bold style={styles.printText}>{t.printer.print}</AppText>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
           onPress={handleExport}
           disabled={exporting}
           style={({ pressed }) => [styles.outlineBtn, (pressed || exporting) && { opacity: 0.8 }]}
@@ -97,20 +63,6 @@ export default function ReceiptScreen({
           <AppText style={styles.secondaryText}>{t.receipt.viewHistory}</AppText>
         </Pressable>
       </View>
-
-      <PrintReceiptModal
-        visible={printOpen}
-        saleId={saleId}
-        shopName={shopName}
-        paperWidth={paperWidth}
-        printerMode={printerMode}
-        printerTarget={printerTarget}
-        printerDeviceName={printerDeviceName}
-        autoCut={autoCut}
-        onClose={() => setPrintOpen(false)}
-        onPrinted={() => onToast(printerMode === 'mock' ? t.printer.mockPrinted : t.printer.printed)}
-        onError={(code) => onToast(code === 'send_unknown' ? t.printer.sendUnknown : t.printer.error)}
-      />
     </View>
   );
 }
@@ -132,11 +84,6 @@ const styles = StyleSheet.create({
   footer: { padding: 16, gap: 10, backgroundColor: '#F5F5F5' },
   primaryBtn: { backgroundColor: '#4A6CF7', borderRadius: radius.md, paddingVertical: 11, alignItems: 'center' },
   primaryText: { color: '#fff', fontSize: 14 },
-  printBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: colors.header, borderRadius: radius.md, paddingVertical: 9,
-  },
-  printText: { color: '#fff', fontSize: 13 },
   outlineBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     borderWidth: 1, borderColor: colors.header, borderRadius: radius.md, paddingVertical: 9,
