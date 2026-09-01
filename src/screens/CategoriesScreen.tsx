@@ -12,6 +12,7 @@ type Props = {
   items: ClothingItem[];
   onEditCategory: (category: Category) => void;
   onDeleteCategory: (category: Category) => void;
+  editable: boolean;
 };
 
 export default function CategoriesScreen({
@@ -19,6 +20,7 @@ export default function CategoriesScreen({
   items,
   onEditCategory,
   onDeleteCategory,
+  editable,
 }: Props) {
   const [search, setSearch] = useState('');
 
@@ -94,7 +96,7 @@ export default function CategoriesScreen({
             <View style={styles.card}>
               <Pressable
                 style={styles.cardMain}
-                onPress={() => onEditCategory(item)}
+                onPress={editable ? () => onEditCategory(item) : undefined}
               >
                 <View style={[styles.colorDot, { backgroundColor: item.color }]} />
                 <View style={styles.cardInfo}>
@@ -106,7 +108,7 @@ export default function CategoriesScreen({
                   </View>
                 </View>
               </Pressable>
-              <View style={styles.cardActions}>
+              {editable ? <View style={styles.cardActions}>
                 <Pressable
                   hitSlop={6}
                   style={[styles.iconBtn, styles.iconBtnDanger]}
@@ -114,7 +116,7 @@ export default function CategoriesScreen({
                 >
                   <TrashIcon size={16} color="#D9534F" />
                 </Pressable>
-              </View>
+              </View> : null}
             </View>
           );
         }}

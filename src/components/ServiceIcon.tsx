@@ -97,6 +97,16 @@ export function HomeIcon({ size = 24, color = '#FFFFFF' }: IconProps) {
   );
 }
 
+export function UsersIcon({ size = 24, color = '#FFFFFF' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx="9" cy="8" r="3" stroke={color} strokeWidth={2} />
+      <Path d="M3.5 20c0-3.2 2.45-5.5 5.5-5.5s5.5 2.3 5.5 5.5" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M16 5.5a3 3 0 0 1 0 5.8M18.8 19.5c0-2.25-1.1-3.95-3.1-4.75" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
 export function ScanIcon({ size = 24, color = '#FFFFFF' }: IconProps) {
   // Figma-style scan: rounded corner brackets framing a center barcode.
   return (

@@ -22,7 +22,7 @@ import {
 } from '../components/ServiceIcon';
 import { SHOP_UNLOCK_CODE } from '../db';
 import { t } from '../i18n';
-import { font } from '../theme';
+import { colors, font } from '../theme';
 
 type Props = {
   onBack: () => void;
@@ -30,6 +30,10 @@ type Props = {
   onExportToDownloads: () => Promise<void>;
   onImport: () => void;
   onOpenAbout: () => void;
+  onOpenSupabaseSetup?: () => void;
+  onOpenAccounts?: () => void;
+  canManageOwnerControls: boolean;
+  onSignOut: () => void;
   busy?: boolean;
   shopName: string;
   shopUnlocked: boolean;
@@ -81,6 +85,10 @@ export default function SettingsScreen({
   onExportToDownloads,
   onImport,
   onOpenAbout,
+  onOpenSupabaseSetup,
+  onOpenAccounts,
+  canManageOwnerControls,
+  onSignOut,
   busy,
   shopName,
   shopUnlocked,
@@ -173,6 +181,10 @@ export default function SettingsScreen({
           />
         </View>
 
+        {onOpenAccounts ? <><AppText style={styles.sectionLabel}>{t.auth.accounts}</AppText><View style={styles.group}><OptionRow icon={StoreIcon} iconBg={colors.accentSoft} iconColor={colors.header} label={t.auth.accounts} hint={t.auth.accountsHint} onPress={onOpenAccounts} /></View></> : null}
+
+        {canManageOwnerControls ? <><AppText style={styles.sectionLabel}>{t.settings.syncSection}</AppText><View style={styles.group}><OptionRow icon={CloudIcon} iconBg="#EBF1FF" iconColor="#3B82F6" label={t.supabaseSetup.title} hint={t.settings.syncHint} onPress={onOpenSupabaseSetup ?? (() => undefined)} /></View></> : null}
+
         <AppText style={styles.sectionLabel}>{t.settings.backupSection}</AppText>
 
         <View style={styles.group}>
@@ -183,7 +195,7 @@ export default function SettingsScreen({
             label={t.settings.saveFile}
             hint={t.settings.saveHint}
             onPress={onExport}
-            disabled={busy}
+            disabled={busy || !canManageOwnerControls}
           />
           <View style={styles.divider} />
           <OptionRow
@@ -193,7 +205,7 @@ export default function SettingsScreen({
             label={t.settings.saveToDownloads}
             hint={t.settings.saveToDownloadsHint}
             onPress={onExportToDownloads}
-            disabled={busy}
+            disabled={busy || !canManageOwnerControls}
           />
         </View>
 
@@ -207,7 +219,7 @@ export default function SettingsScreen({
             label={t.settings.loadFile}
             hint={t.settings.loadHint}
             onPress={onImport}
-            disabled={busy}
+            disabled={busy || !canManageOwnerControls}
           />
         </View>
 
@@ -221,6 +233,18 @@ export default function SettingsScreen({
             label={t.settings.about}
             hint={t.settings.aboutHint}
             onPress={onOpenAbout}
+          />
+        </View>
+
+        <AppText style={styles.sectionLabel}>{t.auth.logout}</AppText>
+        <View style={styles.group}>
+          <OptionRow
+            icon={StoreIcon}
+            iconBg={colors.dangerSoft}
+            iconColor={colors.danger}
+            label={t.auth.logout}
+            hint={t.auth.logoutHint}
+            onPress={onSignOut}
           />
         </View>
 

@@ -22,6 +22,7 @@ type Props = {
   onDeleteCategory: (category: Category) => void;
   onMoveCategoryUp: (category: Category) => void;
   onMoveCategoryDown: (category: Category) => void;
+  editable: boolean;
 };
 
 const BLUE = '#4A6CF7';
@@ -60,6 +61,7 @@ export default function ItemsScreen({
   onDeleteCategory,
   onMoveCategoryUp,
   onMoveCategoryDown,
+  editable,
 }: Props) {
   const [tab, setTab] = useState<TabKey>('products');
   const [showAddMenu, setShowAddMenu] = useState(false);
@@ -92,13 +94,13 @@ export default function ItemsScreen({
     <View style={styles.screen}>
       <View style={styles.header}>
         <AppText bold style={styles.title}>{t.items.title}</AppText>
-        <Pressable
+        {editable ? <Pressable
           accessibilityRole="button"
           onPress={() => setShowAddMenu(!showAddMenu)}
           style={({ pressed }) => [styles.addBtn, pressed && styles.addBtnPressed]}
         >
           <AppText bold style={styles.addText}>+ {t.items.addProduct}</AppText>
-        </Pressable>
+        </Pressable> : null}
       </View>
 
       {showAddMenu && (
@@ -221,7 +223,7 @@ export default function ItemsScreen({
             return (
               <Pressable
                 style={styles.card}
-                onPress={() => onPressItem(item)}
+                onPress={editable ? () => onPressItem(item) : undefined}
               >
                 {item.photoUri ? (
                   <Image
@@ -252,13 +254,13 @@ export default function ItemsScreen({
                     <AppText bold style={[styles.stockValue, { color: stockTextColor }]}>{toMM(stock)}</AppText>
                   </View>
                 </View>
-                <Pressable
+                {editable ? <Pressable
                   hitSlop={8}
                   onPress={() => onDelete(item)}
                   style={styles.deleteBtn}
                 >
                   <TrashIcon size={20} color="#DC2626" />
-                </Pressable>
+                </Pressable> : null}
               </Pressable>
             );
           }}
@@ -270,6 +272,7 @@ export default function ItemsScreen({
           items={items}
           onEditCategory={onEditCategory}
           onDeleteCategory={onDeleteCategory}
+          editable={editable}
         />
       )}
 

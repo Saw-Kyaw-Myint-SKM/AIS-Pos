@@ -20,6 +20,32 @@ export type CustomerProfile = {
   updatedAt: string;
 };
 
+export type LocalAccountRole = 'owner' | 'admin' | 'staff';
+
+export type LocalAccount = {
+  id: number;
+  email: string;
+  name: string;
+  role: LocalAccountRole;
+  isActive: boolean;
+  mustChangePassword: boolean;
+  createdAt: string;
+  updatedAt: string;
+  disabledAt: string | null;
+};
+
+export type LocalAccountCredential = LocalAccount & {
+  passwordHash: string;
+  passwordSalt: string;
+  passwordAlgorithm: string;
+  passwordIterations: number;
+};
+
+export type LocalSession = {
+  account: LocalAccount;
+  createdAt: string;
+};
+
 export type Customer = {
   id: number;
   name: string;
@@ -253,6 +279,40 @@ export async function initializeDatabase(db: SQLiteDatabase) {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS local_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'staff')),
+      password_hash TEXT NOT NULL,
+      password_salt TEXT NOT NULL,
+      password_algorithm TEXT NOT NULL,
+      password_iterations INTEGER NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+      must_change_password INTEGER NOT NULL DEFAULT 0 CHECK (must_change_password IN (0, 1)),
+      remote_user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      disabled_at TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_local_accounts_single_owner
+      ON local_accounts(role) WHERE role = 'owner';
+    CREATE TABLE IF NOT EXISTS local_auth_session (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      account_id INTEGER NOT NULL REFERENCES local_accounts(id) ON DELETE CASCADE,
+      session_token TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS local_account_audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      actor_account_id INTEGER REFERENCES local_accounts(id) ON DELETE SET NULL,
+      target_account_id INTEGER REFERENCES local_accounts(id) ON DELETE SET NULL,
+      action TEXT NOT NULL,
+      detail TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_local_account_audit_target ON local_account_audit(target_account_id, created_at DESC);
     CREATE TABLE IF NOT EXISTS categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -319,6 +379,82 @@ export async function initializeDatabase(db: SQLiteDatabase) {
     );
     CREATE INDEX IF NOT EXISTS idx_credit_sales_customer ON credit_sales(customer_id);
     CREATE INDEX IF NOT EXISTS idx_credit_sales_status ON credit_sales(settled_at, created_at DESC);
+  `);
+
+  // Owner-entered public Supabase project settings remain local to this device.
+  // This table deliberately has no service-role key or database-password fields.
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS supabase_project_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      url TEXT NOT NULL DEFAULT '',
+      publishable_key TEXT NOT NULL DEFAULT '',
+      storage_bucket TEXT NOT NULL DEFAULT '',
+      path_prefix TEXT NOT NULL DEFAULT '',
+      active INTEGER NOT NULL DEFAULT 0 CHECK (active IN (0, 1)),
+      last_test_result TEXT,
+      last_test_code TEXT,
+      last_tested_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    INSERT OR IGNORE INTO supabase_project_config (id) VALUES (1);
+  `);
+
+  // Offline-first Supabase metadata. These tables are local-only and are
+  // additive, so existing SQLite POS data remains usable before sign-in.
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS sync_metadata (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      shop_id TEXT,
+      last_pull_cursor TEXT,
+      last_synced_at TEXT,
+      last_error TEXT,
+      migration_requested_at TEXT,
+      migration_completed TEXT NOT NULL DEFAULT '0',
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    INSERT OR IGNORE INTO sync_metadata (id) VALUES (1);
+    CREATE TABLE IF NOT EXISTS sync_outbox (
+      operation_id TEXT PRIMARY KEY,
+      operation_type TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'syncing', 'completed', 'conflict', 'failed')),
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_sync_outbox_status_created ON sync_outbox(status, created_at);
+    CREATE TABLE IF NOT EXISTS sync_conflicts (
+      operation_id TEXT PRIMARY KEY REFERENCES sync_outbox(operation_id) ON DELETE CASCADE,
+      reason TEXT NOT NULL,
+      server_state TEXT NOT NULL DEFAULT '',
+      resolution_status TEXT NOT NULL DEFAULT 'open' CHECK (resolution_status IN ('open', 'resolved', 'cancelled')),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      resolved_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS local_file_uploads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      local_uri TEXT NOT NULL,
+      item_id INTEGER,
+      storage_path TEXT NOT NULL DEFAULT '',
+      content_type TEXT NOT NULL DEFAULT 'image/jpeg',
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'uploading', 'completed', 'failed')),
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_local_file_uploads_status ON local_file_uploads(status, created_at);
+    CREATE TABLE IF NOT EXISTS sync_entity_map (
+      entity_type TEXT NOT NULL,
+      local_id INTEGER NOT NULL,
+      shop_id TEXT NOT NULL,
+      remote_id TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (entity_type, local_id, shop_id),
+      UNIQUE (shop_id, entity_type, remote_id)
+    );
   `);
 
   // A previous release used camelCase inventory columns. Add canonical
@@ -539,6 +675,209 @@ export async function saveCustomerProfile(
   );
 }
 
+export async function getLocalAccountCount(db: SQLiteDatabase): Promise<number> {
+  const row = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM local_accounts');
+  return row?.count ?? 0;
+}
+
+const localAccountSelect = `
+  SELECT id, email, name, role, is_active AS isActive,
+         must_change_password AS mustChangePassword,
+         created_at AS createdAt, updated_at AS updatedAt, disabled_at AS disabledAt
+  FROM local_accounts`;
+
+export async function getLocalAccountByEmail(db: SQLiteDatabase, email: string): Promise<LocalAccount | null> {
+  return (await db.getFirstAsync<LocalAccount>(
+    `${localAccountSelect} WHERE email = ? COLLATE NOCASE`,
+    email.trim(),
+  )) ?? null;
+}
+
+export async function getLocalAccountCredentialByEmail(
+  db: SQLiteDatabase,
+  email: string,
+): Promise<LocalAccountCredential | null> {
+  return (await db.getFirstAsync<LocalAccountCredential>(
+    `SELECT id, email, name, role, is_active AS isActive,
+            must_change_password AS mustChangePassword,
+            password_hash AS passwordHash, password_salt AS passwordSalt,
+            password_algorithm AS passwordAlgorithm, password_iterations AS passwordIterations,
+            created_at AS createdAt, updated_at AS updatedAt, disabled_at AS disabledAt
+     FROM local_accounts WHERE email = ? COLLATE NOCASE`,
+    email.trim(),
+  )) ?? null;
+}
+
+type LocalSessionRow = LocalAccount & { sessionCreatedAt: string };
+
+export async function getLocalSession(db: SQLiteDatabase): Promise<LocalSession | null> {
+  const row = await db.getFirstAsync<LocalSessionRow>(
+    `SELECT a.id, a.email, a.name, a.role, a.is_active AS isActive,
+            a.must_change_password AS mustChangePassword,
+            a.created_at AS createdAt, a.updated_at AS updatedAt, a.disabled_at AS disabledAt,
+            s.created_at AS sessionCreatedAt
+     FROM local_auth_session s
+     JOIN local_accounts a ON a.id = s.account_id
+     WHERE s.id = 1 AND a.is_active = 1`,
+  );
+  if (!row) return null;
+  return {
+    account: {
+      id: row.id, email: row.email, name: row.name, role: row.role,
+      isActive: Boolean(row.isActive), mustChangePassword: Boolean(row.mustChangePassword),
+      createdAt: row.createdAt, updatedAt: row.updatedAt, disabledAt: row.disabledAt,
+    },
+    createdAt: row.sessionCreatedAt,
+  };
+}
+
+export type LocalAccountWrite = {
+  email: string;
+  name: string;
+  role: LocalAccountRole;
+  passwordHash: string;
+  passwordSalt: string;
+  passwordAlgorithm: string;
+  passwordIterations: number;
+  mustChangePassword?: boolean;
+};
+
+export async function createInitialOwner(
+  db: SQLiteDatabase,
+  profile: { name: string; phone: string; email: string; address: string },
+  account: Omit<LocalAccountWrite, 'role'>,
+  sessionToken: string,
+): Promise<LocalAccount> {
+  let saved: LocalAccount | null = null;
+  await db.withTransactionAsync(async () => {
+    const existing = await getLocalAccountCount(db);
+    if (existing > 0) throw new Error('LOCAL_OWNER_ALREADY_EXISTS');
+    await saveCustomerProfile(db, profile);
+    const result = await db.runAsync(
+      `INSERT INTO local_accounts
+        (email, name, role, password_hash, password_salt, password_algorithm, password_iterations, must_change_password)
+       VALUES (?, ?, 'owner', ?, ?, ?, ?, ?)`,
+      account.email.trim().toLowerCase(), account.name.trim(), account.passwordHash,
+      account.passwordSalt, account.passwordAlgorithm, account.passwordIterations,
+      account.mustChangePassword ? 1 : 0,
+    );
+    saved = await db.getFirstAsync<LocalAccount>(`${localAccountSelect} WHERE id = ?`, result.lastInsertRowId);
+    if (!saved) throw new Error('LOCAL_ACCOUNT_CREATE_FAILED');
+    await db.runAsync(
+      `INSERT INTO local_auth_session (id, account_id, session_token, created_at, updated_at)
+       VALUES (1, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      saved.id, sessionToken,
+    );
+    await db.runAsync(
+      `INSERT INTO local_account_audit (actor_account_id, target_account_id, action)
+       VALUES (?, ?, 'owner_created')`, saved.id, saved.id,
+    );
+  });
+  return saved!;
+}
+
+export async function createLocalSession(db: SQLiteDatabase, accountId: number, sessionToken: string): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO local_auth_session (id, account_id, session_token, created_at, updated_at)
+       VALUES (1, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       ON CONFLICT(id) DO UPDATE SET account_id = excluded.account_id,
+         session_token = excluded.session_token, updated_at = CURRENT_TIMESTAMP`,
+      accountId, sessionToken,
+    );
+    await db.runAsync(
+      `INSERT INTO local_account_audit (actor_account_id, target_account_id, action)
+       VALUES (?, ?, 'signed_in')`, accountId, accountId,
+    );
+  });
+}
+
+export async function clearLocalSession(db: SQLiteDatabase): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    const session = await db.getFirstAsync<{ accountId: number }>(
+      'SELECT account_id AS accountId FROM local_auth_session WHERE id = 1',
+    );
+    await db.runAsync('DELETE FROM local_auth_session WHERE id = 1');
+    if (session) {
+      await db.runAsync(
+        `INSERT INTO local_account_audit (actor_account_id, target_account_id, action)
+         VALUES (?, ?, 'signed_out')`, session.accountId, session.accountId,
+      );
+    }
+  });
+}
+
+export async function updateLocalAccountPassword(
+  db: SQLiteDatabase,
+  accountId: number,
+  verifier: Pick<LocalAccountWrite, 'passwordHash' | 'passwordSalt' | 'passwordAlgorithm' | 'passwordIterations'>,
+): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE local_accounts
+       SET password_hash = ?, password_salt = ?, password_algorithm = ?, password_iterations = ?,
+           must_change_password = 0, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND is_active = 1`,
+      verifier.passwordHash, verifier.passwordSalt, verifier.passwordAlgorithm, verifier.passwordIterations, accountId,
+    );
+    await db.runAsync(
+      `INSERT INTO local_account_audit (actor_account_id, target_account_id, action)
+       VALUES (?, ?, 'password_changed')`, accountId, accountId,
+    );
+  });
+}
+
+export async function getLocalAccounts(db: SQLiteDatabase): Promise<LocalAccount[]> {
+  const rows = await db.getAllAsync<LocalAccount>(`${localAccountSelect} ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, name COLLATE NOCASE`);
+  return rows.map((row) => ({ ...row, isActive: Boolean(row.isActive), mustChangePassword: Boolean(row.mustChangePassword) }));
+}
+
+function canManageRole(actor: LocalAccount, targetRole: LocalAccountRole): boolean {
+  return actor.role === 'owner' ? targetRole === 'admin' || targetRole === 'staff' : actor.role === 'admin' && targetRole === 'staff';
+}
+
+export async function createManagedLocalAccount(
+  db: SQLiteDatabase,
+  actor: LocalAccount,
+  input: LocalAccountWrite,
+): Promise<LocalAccount> {
+  if (!canManageRole(actor, input.role)) throw new Error('LOCAL_ACCOUNT_PERMISSION_DENIED');
+  const result = await db.runAsync(
+    `INSERT INTO local_accounts
+      (email, name, role, password_hash, password_salt, password_algorithm, password_iterations, must_change_password)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+    input.email.trim().toLowerCase(), input.name.trim(), input.role, input.passwordHash,
+    input.passwordSalt, input.passwordAlgorithm, input.passwordIterations,
+  );
+  const saved = await db.getFirstAsync<LocalAccount>(`${localAccountSelect} WHERE id = ?`, result.lastInsertRowId);
+  if (!saved) throw new Error('LOCAL_ACCOUNT_CREATE_FAILED');
+  await db.runAsync(
+    `INSERT INTO local_account_audit (actor_account_id, target_account_id, action, detail)
+     VALUES (?, ?, 'account_created', ?)`, actor.id, saved.id, input.role,
+  );
+  return { ...saved, isActive: Boolean(saved.isActive), mustChangePassword: Boolean(saved.mustChangePassword) };
+}
+
+export async function setManagedLocalAccountActive(
+  db: SQLiteDatabase,
+  actor: LocalAccount,
+  target: LocalAccount,
+  active: boolean,
+): Promise<void> {
+  if (!canManageRole(actor, target.role)) throw new Error('LOCAL_ACCOUNT_PERMISSION_DENIED');
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE local_accounts SET is_active = ?, disabled_at = CASE WHEN ? THEN NULL ELSE CURRENT_TIMESTAMP END,
+       updated_at = CURRENT_TIMESTAMP WHERE id = ?`, active ? 1 : 0, active ? 1 : 0, target.id,
+    );
+    if (!active) await db.runAsync('DELETE FROM local_auth_session WHERE account_id = ?', target.id);
+    await db.runAsync(
+      `INSERT INTO local_account_audit (actor_account_id, target_account_id, action)
+       VALUES (?, ?, ?)`, actor.id, target.id, active ? 'account_enabled' : 'account_disabled',
+    );
+  });
+}
+
 export async function getCustomers(db: SQLiteDatabase) {
   return db.getAllAsync<Customer>(
     `SELECT id, name, phone, address, created_at AS createdAt, updated_at AS updatedAt
@@ -640,18 +979,19 @@ type ClothingItemInput = Omit<
 export async function saveClothingItem(
   db: SQLiteDatabase,
   item: ClothingItemInput,
-) {
+): Promise<number> {
   if (item.id) {
     await db.runAsync(
       `UPDATE items SET qr_code = ?, name = ?, size = ?, price = ?, purchase_cost = ?, category_id = ?, stock = ?, choice_type = ?, color_value = ?, photo_uri = ?, note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
       item.qrCode, item.name, item.size, item.price, item.purchaseCost, item.categoryId, item.stock, item.choiceType, item.colorValue, item.photoUri, item.note, item.id,
     );
-  } else {
-    await db.runAsync(
-      `INSERT INTO items (qr_code, name, size, price, purchase_cost, category_id, stock, choice_type, color_value, photo_uri, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      item.qrCode, item.name, item.size, item.price, item.purchaseCost, item.categoryId, item.stock, item.choiceType, item.colorValue, item.photoUri, item.note,
-    );
+    return item.id;
   }
+  const result = await db.runAsync(
+    `INSERT INTO items (qr_code, name, size, price, purchase_cost, category_id, stock, choice_type, color_value, photo_uri, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    item.qrCode, item.name, item.size, item.price, item.purchaseCost, item.categoryId, item.stock, item.choiceType, item.colorValue, item.photoUri, item.note,
+  );
+  return result.lastInsertRowId;
 }
 
 export async function deleteClothingItem(db: SQLiteDatabase, id: number) {
@@ -1086,6 +1426,8 @@ export const SETTING_SHOP_NAME = 'shop_name';
 export const SETTING_SHOP_NAME_UNLOCKED = 'shop_name_unlocked';
 export const SETTING_STOCK_ALERT_LIMIT = 'stock_alert_limit';
 export const SETTING_PROFIT_TRACKING_READY = 'profit_tracking_ready';
+export const SETTING_SYNC_MODE = 'sync_mode';
+export type SyncMode = 'offline' | 'online';
 
 export const DEFAULT_STOCK_ALERT_LIMIT = 5;
 
@@ -1109,8 +1451,10 @@ export async function setAppSetting(db: SQLiteDatabase, key: string, value: stri
   );
 }
 
-// Keep the provider and import/export path on the same canonical filename.
-export const DATABASE_FILE_NAME = 'clothes-pos.db';
+// Reset database generation: this opens a clean local POS database after the
+// account/password implementation changed. The previous file remains intact
+// on-device and is not silently deleted.
+export const DATABASE_FILE_NAME = 'clothes-pos-v2.db';
 
 export async function exportDatabaseFile(db: SQLiteDatabase): Promise<string> {
   try {
@@ -1185,4 +1529,78 @@ function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
   for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
   return globalThis.btoa(binary);
+}
+
+
+export type SupabaseProjectConfig = {
+  url: string;
+  publishableKey: string;
+  storageBucket: string;
+  pathPrefix: string;
+  active: boolean;
+  lastTestResult: string | null;
+  lastTestCode: string | null;
+  lastTestedAt: string | null;
+};
+
+export type ProjectChangeGuard = {
+  pendingOutbox: number;
+  syncingOutbox: number;
+  failedOutbox: number;
+  openConflicts: number;
+  pendingUploads: number;
+  uploadingUploads: number;
+  failedUploads: number;
+  migrationActive: boolean;
+  blocked: boolean;
+};
+
+const emptySupabaseProjectConfig: SupabaseProjectConfig = { url: '', publishableKey: '', storageBucket: '', pathPrefix: '', active: false, lastTestResult: null, lastTestCode: null, lastTestedAt: null };
+
+export async function getSupabaseProjectConfig(db: SQLiteDatabase): Promise<SupabaseProjectConfig> {
+  const row = await db.getFirstAsync<SupabaseProjectConfig & { active: number }>(`SELECT url, publishable_key AS publishableKey, storage_bucket AS storageBucket, path_prefix AS pathPrefix, active, last_test_result AS lastTestResult, last_test_code AS lastTestCode, last_tested_at AS lastTestedAt FROM supabase_project_config WHERE id = 1`);
+  return row ? { ...row, active: Boolean(row.active) } : emptySupabaseProjectConfig;
+}
+
+export async function getProjectChangeGuard(db: SQLiteDatabase): Promise<ProjectChangeGuard> {
+  const [outbox, conflicts, uploads, migration] = await Promise.all([
+    db.getFirstAsync<{ pendingOutbox: number; syncingOutbox: number; failedOutbox: number }>(`SELECT SUM(status = 'pending') AS pendingOutbox, SUM(status = 'syncing') AS syncingOutbox, SUM(status = 'failed') AS failedOutbox FROM sync_outbox`),
+    db.getFirstAsync<{ count: number }>(`SELECT COUNT(*) AS count FROM sync_conflicts WHERE resolution_status = 'open'`),
+    db.getFirstAsync<{ pendingUploads: number; uploadingUploads: number; failedUploads: number }>(`SELECT SUM(status = 'pending') AS pendingUploads, SUM(status = 'uploading') AS uploadingUploads, SUM(status = 'failed') AS failedUploads FROM local_file_uploads`),
+    db.getFirstAsync<{ requestedAt: string | null; completed: string | null }>(`SELECT migration_requested_at AS requestedAt, migration_completed AS completed FROM sync_metadata WHERE id = 1`),
+  ]);
+  const result = { pendingOutbox: outbox?.pendingOutbox ?? 0, syncingOutbox: outbox?.syncingOutbox ?? 0, failedOutbox: outbox?.failedOutbox ?? 0, openConflicts: conflicts?.count ?? 0, pendingUploads: uploads?.pendingUploads ?? 0, uploadingUploads: uploads?.uploadingUploads ?? 0, failedUploads: uploads?.failedUploads ?? 0, migrationActive: Boolean(migration?.requestedAt) && migration?.completed !== '1' };
+  return { ...result, blocked: Object.values(result).some(Boolean) };
+}
+
+function materiallyChanges(a: SupabaseProjectConfig, b: Pick<SupabaseProjectConfig, 'url' | 'publishableKey' | 'storageBucket' | 'pathPrefix'>) {
+  return a.url !== b.url.trim() || a.publishableKey !== b.publishableKey.trim() || a.storageBucket !== b.storageBucket.trim() || a.pathPrefix !== b.pathPrefix.trim().replace(/^\/+|\/+$/g, '');
+}
+
+export async function saveSupabaseProjectConfig(db: SQLiteDatabase, input: Pick<SupabaseProjectConfig, 'url' | 'publishableKey' | 'storageBucket' | 'pathPrefix'>): Promise<void> {
+  const next = { url: input.url.trim(), publishableKey: input.publishableKey.trim(), storageBucket: input.storageBucket.trim(), pathPrefix: input.pathPrefix.trim().replace(/^\/+|\/+$/g, '') };
+  if (!next.url || !next.publishableKey) throw new Error('SUPABASE_CONFIG_REQUIRED');
+  await db.withTransactionAsync(async () => {
+    const current = await getSupabaseProjectConfig(db);
+    if (current.active && materiallyChanges(current, next)) {
+      const guard = await getProjectChangeGuard(db);
+      if (guard.blocked) throw Object.assign(new Error('SUPABASE_PROJECT_CHANGE_BLOCKED'), { guard });
+    }
+    await db.runAsync(`UPDATE supabase_project_config SET url = ?, publishable_key = ?, storage_bucket = ?, path_prefix = ?, active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = 1`, next.url, next.publishableKey, next.storageBucket, next.pathPrefix);
+  });
+}
+
+export async function clearSupabaseProjectConfig(db: SQLiteDatabase): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    const current = await getSupabaseProjectConfig(db);
+    if (current.active) {
+      const guard = await getProjectChangeGuard(db);
+      if (guard.blocked) throw Object.assign(new Error('SUPABASE_PROJECT_CHANGE_BLOCKED'), { guard });
+    }
+    await db.runAsync(`UPDATE supabase_project_config SET url = '', publishable_key = '', storage_bucket = '', path_prefix = '', active = 0, last_test_result = NULL, last_test_code = NULL, last_tested_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = 1`);
+  });
+}
+
+export async function saveSupabaseTestResult(db: SQLiteDatabase, result: string, code: string | null): Promise<void> {
+  await db.runAsync(`UPDATE supabase_project_config SET last_test_result = ?, last_test_code = ?, last_tested_at = CURRENT_TIMESTAMP WHERE id = 1`, result, code);
 }

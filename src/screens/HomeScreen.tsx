@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { ClothingItem, CustomerProfile, TodaySummary } from '../db';
+import type { ClothingItem, CustomerProfile, SyncMode, TodaySummary } from '../db';
 import { formatKyat, formatDateMM, t, toMM } from '../i18n';
 import { colors, font, radius, tileShadow } from '../theme';
 import AppText from '../components/AppText';
@@ -17,6 +17,8 @@ import {
   PackageIcon,
   ReceiptIcon,
   ScanIcon,
+  CloudIcon,
+  UsersIcon,
   SettingsIcon,
   StockAlertIcon,
 } from '../components/ServiceIcon';
@@ -36,6 +38,9 @@ type Props = {
   onOpenProfitReport: () => void;
   onScan: () => void;
   onOpenSettings: () => void;
+  onOpenSync: () => void;
+  syncMode: SyncMode;
+  onOpenAccounts?: () => void;
   onOpenStockAlert: () => void;
   onOpenCustomers: () => void;
   onStartCreditSale: () => void;
@@ -62,6 +67,9 @@ export default function HomeScreen({
   onOpenProfitReport,
   onScan,
   onOpenSettings,
+  onOpenSync,
+  syncMode,
+  onOpenAccounts,
   onOpenStockAlert,
   onOpenCustomers,
   onStartCreditSale,
@@ -70,6 +78,7 @@ export default function HomeScreen({
 }: Props) {
   const insets = useSafeAreaInsets();
   const customerName = profile?.name?.trim() || t.appName;
+  const isOnline = syncMode === 'online';
 
   const stats = [
     { key: 'today', label: t.home.todaySale, value: formatKyat(summary.total) },
@@ -94,6 +103,7 @@ export default function HomeScreen({
       badgeCount: lowStockCount,
     },
     { key: 'setting', label: t.home.setting, iconBg: colors.iconSlate, Icon: SettingsIcon, onPress: onOpenSettings },
+    ...(onOpenAccounts ? [{ key: 'accounts', label: t.auth.addAccount, iconBg: colors.iconGreen, Icon: UsersIcon, onPress: onOpenAccounts }] : []),
   ];
 
   const creditServices: ServiceTile[] = [
@@ -125,6 +135,15 @@ export default function HomeScreen({
               <AppText style={styles.dateMonth}>{formatDateMM(new Date()).split(' ').slice(1).join(' ')}</AppText>
             </View>
           </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t.sync.title}
+            onPress={onOpenSync}
+            style={({ pressed }) => [styles.syncPill, isOnline && styles.syncPillOnline, pressed && styles.syncPillPressed]}
+          >
+            <CloudIcon size={17} color="#FFFFFF" />
+            <AppText bold style={styles.syncPillText}>{isOnline ? t.sync.onlineMode : t.sync.offlineMode}</AppText>
+          </Pressable>
           <View style={styles.statsInline}>
             <View style={styles.statItem}>
               <AppText bold style={styles.statValue}>{formatKyat(summary.total)}</AppText>
@@ -269,6 +288,10 @@ const styles = StyleSheet.create({
     fontFamily: font.regular,
     marginTop: 2,
   },
+  syncPill: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 34, paddingHorizontal: 12, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.18)', marginBottom: 16 },
+  syncPillOnline: { backgroundColor: 'rgba(16,185,129,0.86)' },
+  syncPillPressed: { opacity: 0.78 },
+  syncPillText: { color: '#FFFFFF', fontSize: 12 },
   statsInline: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
