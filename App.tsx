@@ -15,7 +15,7 @@ import {
   findClothingByQr,
   getAppSetting, getCategories, getClothingItems, getCreditLedger, getCustomerProfile, getCustomers, getProfitSummary, getSales, getTodaySummary,
   importDatabaseFile, initializeDatabase,
-  reorderCategories, saveCategory, saveClothingItem, savePrinterSettings,
+  reorderCategories, saveCategory, saveClothingItem, saveCustomer, savePrinterSettings,
   DEFAULT_PRINTER_MODE, DEFAULT_STOCK_ALERT_LIMIT,
   SETTING_PRINTER_AUTO_CUT, SETTING_PRINTER_DEVICE_NAME,
   SETTING_PRINTER_PAPER_WIDTH, SETTING_PRINTER_TARGET,
