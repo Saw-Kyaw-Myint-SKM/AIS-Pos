@@ -1156,9 +1156,12 @@ export async function exportDatabaseToDownloads(db: SQLiteDatabase): Promise<boo
 export async function importDatabaseFile(db: SQLiteDatabase, sourceUri: string): Promise<void> {
   const bytes = await readPickedBytes(sourceUri);
   if (bytes.byteLength === 0) throw new Error('Picked file is empty');
-  await (db as SQLiteDatabase & {
-    deserializeAsync: (data: Uint8Array) => Promise<void>;
-  }).deserializeAsync(bytes);
+  await db.closeAsync();
+  const dbDir = getDbDirectory();
+  const dbFile = new File(dbDir, DATABASE_FILE_NAME);
+  if (dbFile.exists) dbFile.delete();
+  dbFile.create();
+  dbFile.write(bytes);
 }
 
 async function readPickedBytes(uri: string): Promise<Uint8Array> {
