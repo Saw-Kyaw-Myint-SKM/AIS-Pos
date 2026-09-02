@@ -59,6 +59,8 @@ export default function App() {
     'Pyidaungsu-Bold': require('./assets/fonts/Pyidaungsu-Bold.ttf'),
   });
 
+  const [dbKey, setDbKey] = useState(0);
+
   if (!fontsLoaded && !fontError) {
     return (
       <View style={splashStyles.box}>
@@ -70,10 +72,11 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SQLiteProvider
+        key={dbKey}
         databaseName={DATABASE_FILE_NAME}
         onInit={initializeDatabase}
       >
-        <PosApp />
+        <PosApp onImportDone={() => setDbKey((k) => k + 1)} />
       </SQLiteProvider>
     </SafeAreaProvider>
   );
@@ -92,7 +95,7 @@ const startupStyles = StyleSheet.create({
   retryText: { color: '#FFFFFF', fontSize: 14 },
 });
 
-function PosApp() {
+function PosApp({ onImportDone }: { onImportDone: () => void }) {
   const db = useSQLiteContext();
   const [booted, setBooted] = useState(false);
   const [initialDataLoaded, setInitialDataLoaded] = useState(false);
@@ -586,50 +589,7 @@ function PosApp() {
               return;
             }
             await importDatabaseFile(db, picked.assets[0].uri);
-            await initializeDatabase(db);
-            const [
-              restoredProfile,
-              restoredShopName,
-              restoredShopUnlocked,
-              restoredPrinterTarget,
-              restoredPrinterDeviceName,
-              restoredPaperWidth,
-              restoredPrinterAutoCut,
-              restoredStockAlertLimit,
-              restoredProfitReady,
-            ] = await Promise.all([
-              getCustomerProfile(db),
-              getAppSetting(db, SETTING_SHOP_NAME),
-              getAppSetting(db, SETTING_SHOP_NAME_UNLOCKED),
-              getAppSetting(db, SETTING_PRINTER_TARGET),
-              getAppSetting(db, SETTING_PRINTER_DEVICE_NAME),
-              getAppSetting(db, SETTING_PRINTER_PAPER_WIDTH),
-              getAppSetting(db, SETTING_PRINTER_AUTO_CUT),
-              getAppSetting(db, SETTING_STOCK_ALERT_LIMIT),
-              getAppSetting(db, SETTING_PROFIT_TRACKING_READY),
-            ]);
-            const parsedStockAlertLimit = Number(restoredStockAlertLimit);
-            setProfile(restoredProfile);
-            setShopName(restoredShopName ?? DEFAULT_SHOP_NAME);
-            setShopUnlocked(restoredShopUnlocked === '1');
-            setPrinterTarget(restoredPrinterTarget ?? '');
-            setPrinterDeviceName(restoredPrinterDeviceName ?? '');
-            setPrinterModeState(DEFAULT_PRINTER_MODE);
-            setPaperWidthState(restoredPaperWidth === '80' ? '80' : '58');
-            setPrinterAutoCutState(restoredPrinterAutoCut !== '0');
-            setStockAlertLimit(Number.isSafeInteger(parsedStockAlertLimit) && parsedStockAlertLimit >= 0
-              ? parsedStockAlertLimit
-              : DEFAULT_STOCK_ALERT_LIMIT);
-            setProfitTrackingReady(restoredProfitReady === '1');
-            setCart({});
-            setTaxAmount(0);
-            setDiscountAmount(0);
-            setCartOpen(false);
-            setScannerOpen(false);
-            setLastScannedItem(null);
-            await refreshAll();
-            setRoute(restoredProfile ? { name: 'home' } : { name: 'register' });
-            showToast(t.settings.loadSuccess);
+            onImportDone();
           } catch {
             Alert.alert(t.settings.errorTitle, t.settings.loadError);
           } finally {
@@ -638,7 +598,7 @@ function PosApp() {
         },
       },
     ]);
-  }, [db, refreshAll, settingsBusy, showToast]);
+  }, [db, onImportDone, settingsBusy, showToast]);
 
   const saveItem = useCallback(async (form: ItemFormValue) => {
     const price = Number(form.price);
