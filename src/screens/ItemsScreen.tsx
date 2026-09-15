@@ -609,7 +609,7 @@ const styles = StyleSheet.create({
     fontFamily: font.regular,
   },
   filterOverlay: { flex: 1, justifyContent: 'flex-end' },
-  filterBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: '#00000066' },
+  filterBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: '#00000066' },
   filterSheet: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 22,

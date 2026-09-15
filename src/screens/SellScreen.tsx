@@ -100,7 +100,7 @@ export default function SellScreen({
             <Animated.View
               pointerEvents="none"
               style={[
-                StyleSheet.absoluteFillObject,
+                StyleSheet.absoluteFill,
                 {
                   borderRadius: 14,
                   backgroundColor: toggleAnim.interpolate({
@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   filterBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   filterSheet: {

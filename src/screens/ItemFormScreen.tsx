@@ -1025,7 +1025,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   scannerFrame: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   scannerBracket: {
     position: 'absolute',

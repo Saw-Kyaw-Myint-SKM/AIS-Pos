@@ -10,15 +10,15 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 
 | Layer | Technology | Version |
 |-------|-----------|---------|
-| Runtime | Expo (managed workflow) | ~54.0.36 |
-| UI Framework | React Native | ^0.81.5 |
-| Language | TypeScript (strict mode) | ~5.9.2 |
-| Local DB | SQLite via `expo-sqlite` | ~16.0.10 |
-| Camera/Barcode | `expo-camera` | ~17.0.10 |
-| Font Loading | `expo-font` | ~14.0.12 |
-| Image | `expo-image` | ~3.0.11 |
-| SVG Icons | `react-native-svg` | 15.12.1 |
-| Safe Area | `react-native-safe-area-context` | ~5.6.0 |
+| Runtime | Expo (managed workflow) | ~57.0.22 |
+| UI Framework | React Native | 0.86.3 |
+| Language | TypeScript (strict mode) | ~6.0.3 |
+| Local DB | SQLite via `expo-sqlite` | ~57.0.3 |
+| Camera/Barcode | `expo-camera` | ~57.0.5 |
+| Font Loading | `expo-font` | ~57.0.4 |
+| Image | `expo-image` | ~57.0.5 |
+| SVG Icons | `react-native-svg` | 15.15.4 |
+| Safe Area | `react-native-safe-area-context` | ~5.7.0 |
 | State | React `useState` (no external lib) | — |
 | Navigation | Manual conditional rendering (no React Navigation) | — |
 

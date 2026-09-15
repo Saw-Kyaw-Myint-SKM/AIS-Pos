@@ -65,7 +65,7 @@ export default function ItemFormModal({ visible, initial, onClose, onSave }: Pro
 
 const styles = StyleSheet.create({
   shade: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: '#00000066' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: '#00000066' },
   sheet: {
     backgroundColor: colors.sheet,
     borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl,

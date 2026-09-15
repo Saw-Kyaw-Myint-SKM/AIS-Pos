@@ -51,7 +51,10 @@
           ]
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "expo-image",
+      "expo-sharing",
+      "expo-status-bar"
     ],
     "extra": {
       "eas": {

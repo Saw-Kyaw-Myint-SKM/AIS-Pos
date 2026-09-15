@@ -390,7 +390,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   busyOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(245,246,250,0.7)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: '#00000088',
   },
   modalBox: {
