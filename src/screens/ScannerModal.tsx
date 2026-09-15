@@ -371,9 +371,9 @@ const styles = StyleSheet.create({
     height: 280, borderRadius: radius.lg, overflow: 'hidden',
     backgroundColor: '#000', position: 'relative',
   },
-  camera: { ...StyleSheet.absoluteFillObject, borderRadius: radius.lg },
+  camera: { ...StyleSheet.absoluteFill, borderRadius: radius.lg },
   frameWrap: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center', justifyContent: 'center',
   },
   bracketTL: {

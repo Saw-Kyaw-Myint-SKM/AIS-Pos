@@ -660,7 +660,7 @@ function PosApp({ onImportDone }: { onImportDone: () => void }) {
   if (!booted || !initialDataLoaded || startupError) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <StatusBar style="dark" backgroundColor="#FFFFFF" />
+        <StatusBar style="dark" />
         <View style={[styles.content, startupStyles.container]}>
           {!booted ? (
             <>
@@ -696,7 +696,7 @@ function PosApp({ onImportDone }: { onImportDone: () => void }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={isHome ? [] : ['top']}>
-      <StatusBar style={isHome ? 'light' : 'dark'} backgroundColor={isHome ? '#4A6CF7' : '#FFFFFF'} />
+      <StatusBar style={isHome ? 'light' : 'dark'} />
       <View style={styles.content}>
         {route.name === 'home' && (
           <HomeScreen

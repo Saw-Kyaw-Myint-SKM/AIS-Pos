@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
   outOfStock: { color: '#D9534F' },
   pressed: { opacity: 0.78 },
   modalOverlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: '#00000088' },
+  modalBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: '#00000088' },
   modalBox: { width: '100%', maxWidth: 420, borderRadius: 22, backgroundColor: '#FFFFFF', padding: 24, alignItems: 'center' },
   modalTitle: { color: '#1F2330', fontSize: 17, textAlign: 'center', fontFamily: font.bold },
   modalHint: { color: '#8A90A6', fontSize: 13, lineHeight: 20, textAlign: 'center', fontFamily: font.regular, marginTop: 8 },

@@ -613,7 +613,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   taxBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   taxBox: {
     width: '100%',
@@ -698,7 +698,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   confirmBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: '#00000088',
   },
   confirmBox: {
