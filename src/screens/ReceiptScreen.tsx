@@ -11,6 +11,7 @@ import Receipt from '../components/Receipt';
 type Props = {
   saleId: number;
   shopName: string;
+  shopAddress: string;
   onNewSale: () => void;
   onViewHistory: () => void;
 };
@@ -18,6 +19,7 @@ type Props = {
 export default function ReceiptScreen({
   saleId,
   shopName,
+  shopAddress,
   onNewSale,
   onViewHistory,
 }: Props) {
@@ -30,7 +32,7 @@ export default function ReceiptScreen({
     try {
       const [sale, items] = await Promise.all([getSale(db, saleId), getSaleItems(db, saleId)]);
       if (!sale) return;
-      await exportReceiptPdf(sale, items, shopName);
+      await exportReceiptPdf(sale, items, shopName, shopAddress);
     } catch {
       // Best effort — sharing may be dismissed or unavailable.
     } finally {
@@ -45,7 +47,7 @@ export default function ReceiptScreen({
         <AppText bold style={styles.done}>{t.cart.confirm} ✓</AppText>
       </View>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Receipt saleId={saleId} shopName={shopName} />
+        <Receipt saleId={saleId} shopName={shopName} shopAddress={shopAddress} />
       </ScrollView>
       <View style={styles.footer}>
         <Pressable accessibilityRole="button" onPress={onNewSale} style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.85 }]}>

@@ -6,9 +6,9 @@ import { formatDateTimeMM, formatKyat, t, toMM } from '../i18n';
 import { colors, radius, shadow } from '../theme';
 import AppText from './AppText';
 
-type Props = { saleId: number; shopName: string };
+type Props = { saleId: number; shopName: string; shopAddress?: string };
 
-export default function Receipt({ saleId, shopName }: Props) {
+export default function Receipt({ saleId, shopName, shopAddress }: Props) {
   const db = useSQLiteContext();
   const [sale, setSale] = useState<Sale | null>(null);
   const [items, setItems] = useState<SaleItem[]>([]);
@@ -35,7 +35,9 @@ export default function Receipt({ saleId, shopName }: Props) {
   return (
     <View style={styles.paper}>
       <AppText bold style={styles.shop}>{shopName}</AppText>
-      <AppText style={styles.receiptLabel}>{t.receipt.title}</AppText>
+      {(shopAddress ?? '').split('\n').map((line, i) => (
+        <AppText key={i} style={styles.address}>{line}</AppText>
+      ))}
       <AppText style={styles.meta}>{t.receipt.billNo} #{toMM(sale.id)}</AppText>
       <AppText style={styles.meta}>{formatDateTimeMM(sale.createdAt)}</AppText>
       <View style={styles.dash} />
@@ -91,7 +93,7 @@ const styles = StyleSheet.create({
     ...shadow,
   },
   shop: { textAlign: 'center', fontSize: 20, color: colors.header },
-  receiptLabel: { textAlign: 'center', color: colors.muted, fontSize: 13, marginTop: 4 },
+  address: { textAlign: 'center', color: colors.muted, fontSize: 13, marginTop: 2 },
   meta: { textAlign: 'center', color: colors.muted, fontSize: 12, marginTop: 2 },
   dash: { borderTopWidth: 1, borderStyle: 'dashed', borderColor: colors.border, marginVertical: 14 },
   line: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, gap: 12 },

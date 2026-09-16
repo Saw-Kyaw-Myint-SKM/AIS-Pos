@@ -1043,23 +1043,23 @@ export async function getProfitSummary(
             COUNT(DISTINCT sale_items.sale_id) AS saleCount
      FROM sale_items
      JOIN sales ON sales.id = sale_items.sale_id
-     WHERE sales.created_at >= ?
-       AND sales.created_at < ?
+     LEFT JOIN credit_sales ON credit_sales.sale_id = sales.id
+     WHERE (
+       (credit_sales.id IS NULL
+        AND sales.created_at >= ?
+        AND sales.created_at < ?)
+       OR (credit_sales.settled_at IS NOT NULL
+           AND credit_sales.settled_at >= ?
+           AND credit_sales.settled_at < ?)
+     )
        AND sale_items.cost_price > 0`,
+    dbTimestamp(startInclusive), dbTimestamp(endExclusive),
     dbTimestamp(startInclusive), dbTimestamp(endExclusive),
   );
   const revenue = row?.revenue ?? 0;
   const cost = row?.cost ?? 0;
   const profit = revenue - cost;
   return { revenue, cost, profit, profitPercentage: revenue > 0 ? (profit / revenue) * 100 : 0, saleCount: row?.saleCount ?? 0 };
-}
-
-export async function clearSalesHistory(db: SQLiteDatabase): Promise<void> {
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM credit_sales');
-    await db.runAsync('DELETE FROM sale_items');
-    await db.runAsync('DELETE FROM sales');
-  });
 }
 
 export async function getTodaySummary(db: SQLiteDatabase): Promise<TodaySummary> {
@@ -1083,9 +1083,9 @@ export const DEFAULT_SHOP_NAME = 'AISource MM';
 export const SHOP_UNLOCK_CODE = '123456';
 
 export const SETTING_SHOP_NAME = 'shop_name';
+export const SETTING_SHOP_ADDRESS = 'shop_address';
 export const SETTING_SHOP_NAME_UNLOCKED = 'shop_name_unlocked';
 export const SETTING_STOCK_ALERT_LIMIT = 'stock_alert_limit';
-export const SETTING_PROFIT_TRACKING_READY = 'profit_tracking_ready';
 
 export const DEFAULT_STOCK_ALERT_LIMIT = 5;
 

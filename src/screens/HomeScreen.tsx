@@ -82,8 +82,6 @@ export default function HomeScreen({
   const services: ServiceTile[] = [
     { key: 'sale', label: t.home.sale, iconBg: colors.iconIndigo, Icon: DollarIcon, onPress: onStartSale },
     { key: 'products', label: t.home.products, iconBg: colors.iconPurple, Icon: PackageIcon, onPress: onOpenItems },
-    { key: 'history', label: t.home.salesHistory, iconBg: colors.iconBlue, Icon: ReceiptIcon, onPress: onOpenHistory },
-    { key: 'profit', label: t.home.profitReport, iconBg: colors.iconGreen, Icon: DollarIcon, onPress: onOpenProfitReport },
     { key: 'scan', label: t.home.scan, iconBg: colors.iconCyan, Icon: ScanIcon, onPress: onScan },
     {
       key: 'stock',
@@ -94,6 +92,11 @@ export default function HomeScreen({
       badgeCount: lowStockCount,
     },
     { key: 'setting', label: t.home.setting, iconBg: colors.iconSlate, Icon: SettingsIcon, onPress: onOpenSettings },
+  ];
+
+  const recordServices: ServiceTile[] = [
+    { key: 'history', label: t.home.salesHistory, iconBg: colors.iconBlue, Icon: ReceiptIcon, onPress: onOpenHistory },
+    { key: 'profit', label: t.home.profitReport, iconBg: colors.iconGreen, Icon: DollarIcon, onPress: onOpenProfitReport },
   ];
 
   const creditServices: ServiceTile[] = [
@@ -166,6 +169,30 @@ export default function HomeScreen({
                       </AppText>
                     </View>
                   ) : null}
+                </View>
+                <AppText style={styles.serviceLabel} numberOfLines={2}>
+                  {item.label}
+                </AppText>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <AppText bold style={styles.sectionTitle}>
+          {t.home.records}
+        </AppText>
+        <View style={styles.grid}>
+          {recordServices.map((item) => {
+            const Icon = item.Icon;
+            return (
+              <Pressable
+                key={item.key}
+                accessibilityRole="button"
+                onPress={item.onPress}
+                style={({ pressed }) => [styles.serviceCard, pressed && styles.pressed]}
+              >
+                <View style={[styles.iconBox, { backgroundColor: item.iconBg }]}>
+                  <Icon size={24} color="#FFFFFF" />
                 </View>
                 <AppText style={styles.serviceLabel} numberOfLines={2}>
                   {item.label}

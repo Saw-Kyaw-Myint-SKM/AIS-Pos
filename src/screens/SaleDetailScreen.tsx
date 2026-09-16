@@ -11,6 +11,7 @@ import { BackArrowIcon } from '../components/ServiceIcon';
 type Props = {
   saleId: number;
   shopName: string;
+  shopAddress: string;
   onBack: () => void;
   onEdit: () => void;
   editable?: boolean;
@@ -19,6 +20,7 @@ type Props = {
 export default function SaleDetailScreen({
   saleId,
   shopName,
+  shopAddress,
   onBack,
   onEdit,
   editable = true,
@@ -32,7 +34,7 @@ export default function SaleDetailScreen({
     try {
       const [sale, items] = await Promise.all([getSale(db, saleId), getSaleItems(db, saleId)]);
       if (!sale) return;
-      await exportReceiptPdf(sale, items, shopName);
+      await exportReceiptPdf(sale, items, shopName, shopAddress);
     } catch {
       // Best effort — sharing may be dismissed or unavailable.
     } finally {
@@ -64,7 +66,7 @@ export default function SaleDetailScreen({
         ) : <View style={styles.backBtn} />}
       </View>
       <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
-        <Receipt saleId={saleId} shopName={shopName} />
+        <Receipt saleId={saleId} shopName={shopName} shopAddress={shopAddress} />
         <Pressable
           accessibilityRole="button"
           onPress={handleExport}

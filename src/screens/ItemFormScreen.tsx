@@ -307,7 +307,7 @@ export default function ItemFormScreen({ initial, categories, onBack, onSave, on
           <TextInput
             value={form.price}
             onChangeText={(v) => set('price', v)}
-            placeholder="0"
+            placeholder="1"
             placeholderTextColor="#9CA3AF"
             keyboardType="numeric"
             style={styles.input}
@@ -319,7 +319,7 @@ export default function ItemFormScreen({ initial, categories, onBack, onSave, on
           <TextInput
             value={form.purchaseCost}
             onChangeText={(v) => set('purchaseCost', v)}
-            placeholder="0"
+            placeholder="1"
             placeholderTextColor="#9CA3AF"
             keyboardType="numeric"
             style={styles.input}
@@ -360,11 +360,11 @@ export default function ItemFormScreen({ initial, categories, onBack, onSave, on
           </View>
 
           <View style={styles.flexField}>
-            <AppText style={styles.label}>{t.items.stock}</AppText>
+            <AppText style={styles.label}>{requiredLabel(t.items.stock)}</AppText>
             <TextInput
               value={form.stock}
               onChangeText={(v) => set('stock', v)}
-              placeholder="0"
+              placeholder="1"
               placeholderTextColor="#9CA3AF"
               keyboardType="numeric"
               style={styles.input}

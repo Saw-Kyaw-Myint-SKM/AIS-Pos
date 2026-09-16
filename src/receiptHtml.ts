@@ -36,6 +36,7 @@ export async function buildReceiptHtml(
   sale: Sale,
   items: SaleItem[],
   shopName: string,
+  shopAddress?: string,
 ): Promise<string> {
   const fonts = await loadFonts();
 
@@ -78,7 +79,7 @@ export async function buildReceiptHtml(
 </head>
 <body>
   <div class="shop">${escapeHtml(shopName)}</div>
-  <div class="label">${escapeHtml(t.receipt.title)}</div>
+  <div class="label">${escapeHtml(shopAddress ?? '').replace(/\n/g, '<br/>')}</div>
   <div class="meta">${escapeHtml(t.receipt.billNo)} #${toMM(sale.id)}</div>
   <div class="meta">${formatDateTimeMM(sale.createdAt)}</div>
   <div class="dash"></div>
@@ -101,8 +102,9 @@ export async function exportReceiptPdf(
   sale: Sale,
   items: SaleItem[],
   shopName: string,
+  shopAddress?: string,
 ): Promise<void> {
-  const html = await buildReceiptHtml(sale, items, shopName);
+  const html = await buildReceiptHtml(sale, items, shopName, shopAddress);
   const { uri } = await Print.printToFileAsync({ html });
   await Sharing.shareAsync(uri, {
     mimeType: 'application/pdf',

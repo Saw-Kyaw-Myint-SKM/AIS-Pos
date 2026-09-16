@@ -32,9 +32,11 @@ type Props = {
   onOpenAbout: () => void;
   busy?: boolean;
   shopName: string;
+  shopAddress: string;
   shopUnlocked: boolean;
   onUnlockShopName: () => Promise<void>;
   onSaveShopName: (name: string) => Promise<void>;
+  onSaveShopAddress: (address: string) => Promise<void>;
 };
 
 type OptionRowProps = {
@@ -83,9 +85,11 @@ export default function SettingsScreen({
   onOpenAbout,
   busy,
   shopName,
+  shopAddress,
   shopUnlocked,
   onUnlockShopName,
   onSaveShopName,
+  onSaveShopAddress,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [unlockOpen, setUnlockOpen] = useState(false);
@@ -93,11 +97,13 @@ export default function SettingsScreen({
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState('');
   const [nameInput, setNameInput] = useState('');
+  const [addressInput, setAddressInput] = useState('');
   const [savingName, setSavingName] = useState(false);
 
   const openShopSetting = () => {
     if (shopUnlocked) {
       setNameInput(shopName);
+      setAddressInput(shopAddress);
       setEditOpen(true);
     } else {
       setCode('');
@@ -111,6 +117,7 @@ export default function SettingsScreen({
       await onUnlockShopName();
       setUnlockOpen(false);
       setNameInput(shopName);
+      setAddressInput(shopAddress);
       setEditOpen(true);
     } else {
       setCodeError(t.settings.wrongCode);
@@ -122,6 +129,7 @@ export default function SettingsScreen({
     setSavingName(true);
     try {
       await onSaveShopName(nameInput);
+      await onSaveShopAddress(addressInput);
       setEditOpen(false);
     } finally {
       setSavingName(false);
@@ -168,7 +176,7 @@ export default function SettingsScreen({
             iconBg="#FFF3E6"
             iconColor="#E8862E"
             label={t.settings.shopName}
-            hint={shopUnlocked ? shopName : t.settings.shopLockedHint}
+            hint={shopUnlocked ? (shopAddress ? `${shopName} · ${shopAddress}` : shopName) : t.settings.shopLockedHint}
             onPress={openShopSetting}
           />
         </View>
@@ -298,6 +306,16 @@ export default function SettingsScreen({
               placeholderTextColor="#C7C7CF"
               autoCapitalize="words"
               autoFocus
+            />
+            <TextInput
+              style={[styles.modalInput, { marginTop: 12, height: 80, textAlignVertical: 'top' }]}
+              value={addressInput}
+              onChangeText={setAddressInput}
+              placeholder={t.settings.shopAddress}
+              placeholderTextColor="#C7C7CF"
+              autoCapitalize="words"
+              multiline
+              numberOfLines={3}
             />
             <View style={styles.modalActions}>
               <Pressable

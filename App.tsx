@@ -9,7 +9,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AppText from './src/components/AppText';
 import CartSheet, { type CartLine } from './src/components/CartSheet';
 import {
-  createCreditSale, createSale, clearSalesHistory, deleteCategory, deleteClothingItem, deleteCustomer, DATABASE_FILE_NAME, DEFAULT_PAPER_WIDTH, DEFAULT_SHOP_NAME, exportDatabaseFile, exportDatabaseToDownloads,
+  createCreditSale, createSale, deleteCategory, deleteClothingItem, deleteCustomer, DATABASE_FILE_NAME, DEFAULT_PAPER_WIDTH, DEFAULT_SHOP_NAME, exportDatabaseFile, exportDatabaseToDownloads,
   CUSTOMER_HAS_CREDIT_ERROR, INSUFFICIENT_STOCK_ERROR, SALE_ITEM_UNAVAILABLE_ERROR,
   updateSale, settleCreditSale,
   findClothingByQr,
@@ -17,7 +17,7 @@ import {
   importDatabaseFile, initializeDatabase,
   reorderCategories, saveCategory, saveClothingItem, saveCustomer,
   DEFAULT_STOCK_ALERT_LIMIT, SETTING_PRINTER_PAPER_WIDTH,
-  SETTING_SHOP_NAME, SETTING_SHOP_NAME_UNLOCKED, SETTING_STOCK_ALERT_LIMIT, SETTING_PROFIT_TRACKING_READY, setAppSetting,
+  SETTING_SHOP_NAME, SETTING_SHOP_ADDRESS, SETTING_SHOP_NAME_UNLOCKED, SETTING_STOCK_ALERT_LIMIT, setAppSetting,
   type Category, type ClothingItem, type CreditLedgerRow, type Customer, type CustomerInput, type CustomerProfile, type PaperWidth, type ProfitSummary, type Sale, type SaleUpdateInput, type TodaySummary,
 } from './src/db';
 import { scanFormatLabel, t } from './src/i18n';
@@ -116,10 +116,10 @@ function PosApp({ onImportDone }: { onImportDone: () => void }) {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [shopName, setShopName] = useState(DEFAULT_SHOP_NAME);
+  const [shopAddress, setShopAddress] = useState('');
   const [shopUnlocked, setShopUnlocked] = useState(false);
   const [paperWidth, setPaperWidthState] = useState<PaperWidth>(DEFAULT_PAPER_WIDTH);
   const [stockAlertLimit, setStockAlertLimit] = useState(DEFAULT_STOCK_ALERT_LIMIT);
-  const [profitTrackingReady, setProfitTrackingReady] = useState(false);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -168,17 +168,17 @@ function PosApp({ onImportDone }: { onImportDone: () => void }) {
         const [
           existing,
           name,
+          addr,
           unlocked,
           pWidth,
           savedStockAlertLimit,
-          profitReady,
         ] = await Promise.all([
           loadBootstrap('customer-profile', getCustomerProfile(db)),
           loadBootstrap('settings:shop-name', getAppSetting(db, SETTING_SHOP_NAME)),
+          loadBootstrap('settings:shop-address', getAppSetting(db, SETTING_SHOP_ADDRESS)),
           loadBootstrap('settings:shop-name-unlocked', getAppSetting(db, SETTING_SHOP_NAME_UNLOCKED)),
           loadBootstrap('settings:printer-paper-width', getAppSetting(db, SETTING_PRINTER_PAPER_WIDTH)),
           loadBootstrap('settings:stock-alert-limit', getAppSetting(db, SETTING_STOCK_ALERT_LIMIT)),
-          loadBootstrap('settings:profit-tracking-ready', getAppSetting(db, SETTING_PROFIT_TRACKING_READY)),
         ]);
         const parsedStockAlertLimit = Number(savedStockAlertLimit);
         const nextStockAlertLimit = Number.isSafeInteger(parsedStockAlertLimit) && parsedStockAlertLimit >= 0
@@ -187,10 +187,10 @@ function PosApp({ onImportDone }: { onImportDone: () => void }) {
         if (cancelled) return;
         setProfile(existing);
         setShopName(name ?? DEFAULT_SHOP_NAME);
+        setShopAddress(addr ?? '');
         setShopUnlocked(unlocked === '1');
         setPaperWidthState((pWidth === '80' ? '80' : '58') as PaperWidth);
         setStockAlertLimit(nextStockAlertLimit);
-        setProfitTrackingReady(profitReady === '1');
         setRoute(existing ? { name: 'home' } : { name: 'register' });
       } catch (error) {
         const stage = error instanceof Error && error.message ? error.message : 'BOOTSTRAP';
@@ -224,6 +224,11 @@ function PosApp({ onImportDone }: { onImportDone: () => void }) {
     if (!trimmed) return;
     await setAppSetting(db, SETTING_SHOP_NAME, trimmed);
     setShopName(trimmed);
+  }, [db]);
+
+  const saveShopAddress = useCallback(async (address: string) => {
+    await setAppSetting(db, SETTING_SHOP_ADDRESS, address);
+    setShopAddress(address);
   }, [db]);
 
   const saveStockAlertLimit = useCallback(async (limit: number) => {
@@ -281,37 +286,8 @@ function PosApp({ onImportDone }: { onImportDone: () => void }) {
   }, [refreshAll, startupAttempt]);
 
   const openProfitReport = useCallback(() => {
-    const proceed = async () => {
-      try {
-        await clearSalesHistory(db);
-        await setAppSetting(db, SETTING_PROFIT_TRACKING_READY, '1');
-        setProfitTrackingReady(true);
-        await refreshAll();
-        setRoute({ name: 'profitReport' });
-      } catch {
-        Alert.alert(t.profit.resetError);
-      }
-    };
-
-    if (profitTrackingReady) {
-      setRoute({ name: 'profitReport' });
-    } else if (!sales.length) {
-      void (async () => {
-        try {
-          await setAppSetting(db, SETTING_PROFIT_TRACKING_READY, '1');
-          setProfitTrackingReady(true);
-          setRoute({ name: 'profitReport' });
-        } catch {
-          Alert.alert(t.profit.resetError);
-        }
-      })();
-    } else {
-      Alert.alert(t.profit.resetTitle, t.profit.resetBody, [
-        { text: t.profit.cancel, style: 'cancel' },
-        { text: t.profit.resetConfirm, style: 'destructive', onPress: () => { void proceed(); } },
-      ]);
-    }
-  }, [db, profitTrackingReady, refreshAll, sales.length]);
+    setRoute({ name: 'profitReport' });
+  }, []);
 
   const loadProfitSummary = useCallback((startInclusive: Date, endExclusive: Date): Promise<ProfitSummary> => (
     getProfitSummary(db, startInclusive, endExclusive)
@@ -561,9 +537,14 @@ function PosApp({ onImportDone }: { onImportDone: () => void }) {
   const saveItem = useCallback(async (form: ItemFormValue) => {
     const price = Number(form.price);
     const purchaseCost = Number(form.purchaseCost);
-    const stock = Number(form.stock) || 0;
-    if (!form.name.trim() || !form.categoryId || !Number.isFinite(price) || price < 0
-      || !Number.isFinite(purchaseCost) || purchaseCost < 0) {
+    const stock = Number(form.stock);
+    const hasValidPrice = form.price.trim() !== '' && Number.isFinite(price) && price > 0;
+    const hasValidPurchaseCost = form.purchaseCost.trim() !== ''
+      && Number.isFinite(purchaseCost) && purchaseCost > 0;
+    const hasValidStock = form.stock.trim() !== ''
+      && Number.isSafeInteger(stock) && stock > 0;
+    if (!form.name.trim() || !form.categoryId || !hasValidPrice || !hasValidPurchaseCost
+      || !hasValidStock || price <= purchaseCost) {
       Alert.alert(t.items.invalidTitle, t.items.invalidBody);
       return;
     }
@@ -802,6 +783,7 @@ function PosApp({ onImportDone }: { onImportDone: () => void }) {
           <ReceiptScreen
             saleId={route.saleId}
             shopName={shopName}
+            shopAddress={shopAddress}
             onNewSale={() => setRoute({ name: 'sell' })}
             onViewHistory={() => setRoute({ name: 'history' })}
           />
@@ -810,6 +792,7 @@ function PosApp({ onImportDone }: { onImportDone: () => void }) {
           <SaleDetailScreen
             saleId={route.saleId}
             shopName={shopName}
+            shopAddress={shopAddress}
             onBack={() => setRoute({ name: 'history' })}
             editable={!creditLedger.some((credit) => credit.saleId === route.saleId)}
             onEdit={() => setRoute({ name: 'saleEdit', saleId: route.saleId })}
@@ -867,9 +850,11 @@ function PosApp({ onImportDone }: { onImportDone: () => void }) {
             onOpenAbout={() => setRoute({ name: 'about' })}
             busy={settingsBusy}
             shopName={shopName}
+            shopAddress={shopAddress}
             shopUnlocked={shopUnlocked}
             onUnlockShopName={unlockShopName}
             onSaveShopName={saveShopName}
+            onSaveShopAddress={saveShopAddress}
           />
         )}
         {route.name === 'about' && (
