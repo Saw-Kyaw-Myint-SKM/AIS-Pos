@@ -1,4 +1,4 @@
-# Clothes POS — အဝတ်အစားဆိုင်
+# POS 
 
 Offline clothing point-of-sale app built with Expo, React Native, TypeScript, and SQLite. UI is fully in Burmese (Unicode) with Myanmar Kyat pricing, inspired by Loyverse POS.
 
